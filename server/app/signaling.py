@@ -1,18 +1,35 @@
 import json
+import logging
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 
 from .config import settings
+from .ratelimit import SlidingWindowLimiter
 from .rooms import Peer, RoomManager
 
+logger = logging.getLogger(__name__)
+
 manager = RoomManager(settings.room_ttl_seconds, settings.max_room_size)
+room_limiter = SlidingWindowLimiter(settings.rooms_per_minute)
 
 router = APIRouter()
 
 
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 @router.post("/rooms")
-def create_room() -> dict:
+def create_room(request: Request) -> dict:
+    ip = _client_ip(request)
+    if not room_limiter.allow(ip):
+        logger.warning("rate limit exceeded", extra={"ip": ip})
+        raise HTTPException(status_code=429, detail="too many rooms")
     room = manager.create()
+    logger.info("room created", extra={"room_id": room.id})
     return {"room_id": room.id, "link": f"/?room={room.id}"}
 
 
@@ -40,6 +57,7 @@ async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
         return
 
     manager.touch(room)
+    logger.info("peer joined", extra={"room_id": room_id, "peer_id": peer_id})
 
     try:
         existing = [p.id for p in manager.peers(room, exclude=peer_id)]
@@ -86,5 +104,6 @@ async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
         pass
     finally:
         manager.remove_peer(room, peer_id)
+        logger.info("peer left", extra={"room_id": room_id, "peer_id": peer_id})
         for p in manager.peers(room):
             await p.websocket.send_json({"type": "peer-left", "peer_id": peer_id})
