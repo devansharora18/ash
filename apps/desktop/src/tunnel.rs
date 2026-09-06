@@ -154,6 +154,12 @@ pub async fn route_dns(bin: &Path, name: &str, hostname: &str) -> Result<String,
         .map_err(|e| format!("route dns failed: {e}"))
 }
 
+pub async fn delete(bin: &Path, name: &str) -> Result<String, String> {
+    run_cloudflared(bin, &["tunnel", "delete", "-f", name])
+        .await
+        .map_err(|e| format!("tunnel delete failed: {e}"))
+}
+
 pub async fn spawn_run(
     bin: &Path,
     name: &str,

@@ -5,12 +5,40 @@ mod deploy;
 mod tunnel;
 
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use config::{validate_hostname, Config};
 use dioxus::prelude::*;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 
 fn main() {
     dioxus::launch(App);
+}
+
+fn stream_reader<R>(mut reader: R, mut log: Signal<Vec<String>>)
+where
+    R: AsyncBufRead + Unpin + Send + 'static,
+{
+    spawn(async move {
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    let trimmed = line.trim_end().to_string();
+                    if !trimmed.is_empty() {
+                        let mut lines = log.write();
+                        lines.push(trimmed);
+                        let len = lines.len();
+                        if len > 200 {
+                            lines.drain(..len - 200);
+                        }
+                    }
+                }
+            }
+        }
+    });
 }
 
 #[allow(non_snake_case)]
@@ -19,8 +47,9 @@ fn App() -> Element {
     let mut status = use_signal(|| "Not tested".to_string());
     let mut testing = use_signal(|| false);
     let mut logged_in = use_signal(cloudflare::is_logged_in);
-    let mut tunnel_status = use_signal(|| "Not created".to_string());
     let mut deploy_status = use_signal(|| "Not deployed".to_string());
+    let mut running = use_signal(|| false);
+    let mut log_lines = use_signal(Vec::new);
     let mut tunnel_child: Signal<Option<Arc<Mutex<tokio::process::Child>>>> = use_signal(|| None);
 
     let run_check = move |_| {
@@ -47,15 +76,31 @@ fn App() -> Element {
         }
     };
 
-    let create_tunnel = move |_| {
+    let stop = move |_| {
+        if let Some(arc) = tunnel_child.read().clone() {
+            let mut guard = arc.lock().unwrap();
+            let _ = guard.start_kill();
+        }
+        *tunnel_child.write() = None;
+        running.set(false);
+        deploy_status.set("Stopped.".to_string());
+    };
+
+    let teardown = move |_| {
+        if let Some(arc) = tunnel_child.read().clone() {
+            let mut guard = arc.lock().unwrap();
+            let _ = guard.start_kill();
+        }
+        *tunnel_child.write() = None;
+        running.set(false);
         let name = config.read().tunnel_name.clone();
-        tunnel_status.set("Preparing cloudflared…".to_string());
+        deploy_status.set("Tearing down…".to_string());
         spawn(async move {
             match tunnel::ensure_binary().await {
-                Err(e) => tunnel_status.set(format!("Download failed: {e}")),
-                Ok(bin) => match tunnel::ensure(&bin, &name).await {
-                    Ok(msg) => tunnel_status.set(msg.trim().to_string()),
-                    Err(e) => tunnel_status.set(format!("Create failed: {e}")),
+                Err(e) => deploy_status.set(format!("Teardown failed: {e}")),
+                Ok(bin) => match tunnel::delete(&bin, &name).await {
+                    Ok(msg) => deploy_status.set(format!("Tunnel removed. {}", msg.trim())),
+                    Err(e) => deploy_status.set(format!("Teardown failed: {e}")),
                 },
             }
         });
@@ -70,7 +115,36 @@ fn App() -> Element {
             match deploy::deploy(&backend_url, &hostname, &tunnel_name).await {
                 Ok(res) => {
                     let url = res.public_url.clone();
-                    *tunnel_child.write() = Some(Arc::new(Mutex::new(res.child)));
+                    let mut child = res.child;
+                    let stdout = child.stdout.take();
+                    let stderr = child.stderr.take();
+                    let arc = Arc::new(Mutex::new(child));
+                    *tunnel_child.write() = Some(arc.clone());
+                    running.set(true);
+                    log_lines.set(Vec::new());
+                    if let Some(out) = stdout {
+                        stream_reader(BufReader::new(out), log_lines);
+                    }
+                    if let Some(err) = stderr {
+                        stream_reader(BufReader::new(err), log_lines);
+                    }
+                    spawn(async move {
+                        loop {
+                            tokio::time::sleep(Duration::from_millis(1000)).await;
+                            let exited = {
+                                let mut guard = arc.lock().unwrap();
+                                match guard.try_wait() {
+                                    Ok(Some(_)) => true,
+                                    Ok(None) => false,
+                                    Err(_) => true,
+                                }
+                            };
+                            if exited {
+                                running.set(false);
+                                break;
+                            }
+                        }
+                    });
                     deploy_status.set(format!("Deployed — {url}"));
                 }
                 Err(e) => deploy_status.set(format!("Deploy failed: {e}")),
@@ -135,16 +209,29 @@ fn App() -> Element {
                 }
             }
 
-            h2 { "Tunnel" }
-            button { onclick: create_tunnel, "Create Tunnel" }
-            p { style: "color: #666",
-                "{tunnel_status}"
-            }
-
             h2 { "Deploy" }
             button { onclick: run_deploy, "Deploy" }
+            button {
+                onclick: stop,
+                disabled: !running(),
+                "Stop"
+            }
+            button { onclick: teardown, "Teardown" }
             p { style: "color: #666",
                 "{deploy_status}"
+            }
+
+            if running() {
+                p { style: "color: #18794e",
+                    "Tunnel running."
+                }
+            }
+
+            if !log_lines.read().is_empty() {
+                h3 { "Tunnel log" }
+                pre { style: "background: #f5f5f5; padding: 8px; max-height: 200px; overflow: auto; font-size: 12px; white-space: pre-wrap",
+                    "{log_lines.read().join(\"\n\")}"
+                }
             }
         }
     }
