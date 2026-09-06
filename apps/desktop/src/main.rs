@@ -1,6 +1,7 @@
 mod backend;
 mod cloudflare;
 mod config;
+mod tunnel;
 
 use config::{validate_hostname, Config};
 use dioxus::prelude::*;
@@ -15,6 +16,7 @@ fn App() -> Element {
     let mut status = use_signal(|| "Not tested".to_string());
     let mut testing = use_signal(|| false);
     let mut logged_in = use_signal(cloudflare::is_logged_in);
+    let mut tunnel_status = use_signal(|| "Not created".to_string());
 
     let run_check = move |_| {
         let url = config.read().backend_url.clone();
@@ -38,6 +40,22 @@ fn App() -> Element {
             Ok(()) => status.set("Saved.".to_string()),
             Err(e) => status.set(format!("Save failed: {e}")),
         }
+    };
+
+    let create_tunnel = move |_| {
+        let name = config.read().tunnel_name.clone();
+        tunnel_status.set("Preparing cloudflared…".to_string());
+        spawn(async move {
+            match tunnel::ensure_binary().await {
+                Err(e) => tunnel_status.set(format!("Download failed: {e}")),
+                Ok(bin) => match tunnel::create(&bin, &name).await {
+                    Ok(msg) => {
+                        tunnel_status.set(format!("Tunnel `{name}` ready. {}", msg.trim()));
+                    }
+                    Err(e) => tunnel_status.set(format!("Create failed: {e}")),
+                },
+            }
+        });
     };
 
     rsx! {
@@ -95,6 +113,12 @@ fn App() -> Element {
                     Ok(()) => rsx! { p { style: "color: #18794e", "Valid hostname." } },
                     Err(e) => rsx! { p { style: "color: #b3261e", "{e}" } },
                 }
+            }
+
+            h2 { "Tunnel" }
+            button { onclick: create_tunnel, "Create Tunnel" }
+            p { style: "color: #666",
+                "{tunnel_status}"
             }
         }
     }
