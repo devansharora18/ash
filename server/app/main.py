@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
 async def _cleanup_loop() -> None:
     while True:
         await asyncio.sleep(settings.cleanup_interval_seconds)
-        manager.cleanup()
+        await manager.cleanup()
 
 
 app = FastAPI(title="Ash signaling server", lifespan=lifespan)

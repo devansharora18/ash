@@ -49,8 +49,13 @@ class RoomManager:
     def touch(self, room: Room) -> None:
         room.last_activity = time.time()
 
-    def cleanup(self) -> None:
+    async def cleanup(self) -> None:
         now = time.time()
-        expired = [rid for rid, r in self._rooms.items() if now - r.last_activity > self._ttl]
-        for rid in expired:
-            self._rooms.pop(rid, None)
+        expired = [r for r in self._rooms.values() if now - r.last_activity > self._ttl]
+        for room in expired:
+            self._rooms.pop(room.id, None)
+            for peer in list(room.peers.values()):
+                try:
+                    await peer.websocket.close(code=4408, reason="room expired")
+                except Exception:
+                    pass
