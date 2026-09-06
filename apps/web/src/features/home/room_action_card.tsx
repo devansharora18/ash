@@ -13,7 +13,11 @@ function sanitize(value: string) {
   return value.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase()
 }
 
-function RoomActionCard() {
+interface RoomActionCardProps {
+  onEnterChat: () => void
+}
+
+function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -71,6 +75,7 @@ function RoomActionCard() {
       setCode(`${generated.slice(0, 3)}-${generated.slice(3)}`)
       setCreating(false)
       setError(null)
+      onEnterChat()
     }, 600)
   }
 
