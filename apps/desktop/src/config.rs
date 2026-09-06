@@ -43,6 +43,35 @@ impl Config {
     }
 }
 
+pub fn validate_hostname(hostname: &str) -> Result<(), &'static str> {
+    let h = hostname.trim().trim_end_matches('.');
+    if h.is_empty() {
+        return Err("hostname is empty");
+    }
+    if h.len() > 253 {
+        return Err("hostname too long");
+    }
+    if h.contains("://") || h.contains('/') {
+        return Err("enter a bare hostname, no scheme or path");
+    }
+    let labels: Vec<&str> = h.split('.').collect();
+    if labels.len() < 2 {
+        return Err("needs a dot (e.g. ash.example.com)");
+    }
+    for label in &labels {
+        if label.is_empty() || label.len() > 63 {
+            return Err("invalid label length");
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return Err("label cannot start or end with '-'");
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return Err("labels may only contain letters, digits, and hyphens");
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -53,5 +82,21 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let decoded: Config = serde_json::from_str(&json).unwrap();
         assert_eq!(config, decoded);
+    }
+
+    #[test]
+    fn validate_hostname_accepts_subdomain() {
+        assert!(validate_hostname("ash.example.com").is_ok());
+        assert!(validate_hostname("  ash.example.com  ").is_ok());
+    }
+
+    #[test]
+    fn validate_hostname_rejects_bad_input() {
+        assert!(validate_hostname("").is_err());
+        assert!(validate_hostname("nodot").is_err());
+        assert!(validate_hostname("https://ash.example.com").is_err());
+        assert!(validate_hostname("ash.example.com/path").is_err());
+        assert!(validate_hostname("ash..com").is_err());
+        assert!(validate_hostname("-ash.example.com").is_err());
     }
 }

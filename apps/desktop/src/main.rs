@@ -2,7 +2,7 @@ mod backend;
 mod cloudflare;
 mod config;
 
-use config::Config;
+use config::{validate_hostname, Config};
 use dioxus::prelude::*;
 
 fn main() {
@@ -80,6 +80,21 @@ fn App() -> Element {
             button {
                 onclick: move |_| logged_in.set(cloudflare::is_logged_in()),
                 "Re-check"
+            }
+
+            h2 { "Subdomain" }
+            label { "Public hostname" }
+            input {
+                value: "{config.read().hostname}",
+                oninput: move |e: FormEvent| config.write().hostname = e.value(),
+                placeholder: "ash.example.com",
+                style: "display: block; width: 100%; margin: 4px 0 8px",
+            }
+            {
+                match validate_hostname(&config.read().hostname) {
+                    Ok(()) => rsx! { p { style: "color: #18794e", "Valid hostname." } },
+                    Err(e) => rsx! { p { style: "color: #b3261e", "{e}" } },
+                }
             }
         }
     }
