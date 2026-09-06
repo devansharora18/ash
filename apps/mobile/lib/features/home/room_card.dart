@@ -1,12 +1,10 @@
-import 'dart:async';
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../services/signaling.dart';
 import '../../theme.dart';
 
-enum _CreateStage { idle, generating, created }
+enum _CreateStage { idle, generating }
 
 class RoomCard extends StatefulWidget {
   const RoomCard({
@@ -14,72 +12,55 @@ class RoomCard extends StatefulWidget {
     required this.errorText,
     required this.onShowError,
     required this.onDismissError,
+    required this.backendUrl,
+    required this.onCreateRoom,
+    required this.onJoinRoom,
   });
 
   final String? errorText;
   final void Function(String) onShowError;
   final VoidCallback onDismissError;
+  final String backendUrl;
+  final void Function(String roomId) onCreateRoom;
+  final void Function(String roomId) onJoinRoom;
 
   @override
   State<RoomCard> createState() => _RoomCardState();
 }
 
 class _RoomCardState extends State<RoomCard> {
-  static const _codeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  static final _random = Random();
-
-  final _roomCodeController = TextEditingController();
-  final _roomCodeFocus = FocusNode();
+  final _roomIdController = TextEditingController();
+  final _roomIdFocus = FocusNode();
 
   _CreateStage _stage = _CreateStage.idle;
-  bool _joining = false;
-  bool _codeCreated = false;
-  String? _createdCode;
-  Timer? _createTimer;
-  Timer? _createResetTimer;
-  Timer? _joinTimer;
 
   @override
   void dispose() {
-    _createTimer?.cancel();
-    _createResetTimer?.cancel();
-    _joinTimer?.cancel();
-    _roomCodeController.dispose();
-    _roomCodeFocus.dispose();
+    _roomIdController.dispose();
+    _roomIdFocus.dispose();
     super.dispose();
   }
 
-  String _pick(int length) => List.generate(
-        length,
-        (_) => _codeAlphabet[_random.nextInt(_codeAlphabet.length)],
-      ).join();
-
-  String _formatCode(String text) {
-    var clean = text.toUpperCase().replaceAll(RegExp('[^A-Z0-9]'), '');
-    if (clean.length > 5) clean = clean.substring(0, 5);
-    return clean.length > 2
-        ? '${clean.substring(0, 2)}-${clean.substring(2)}'
-        : clean;
-  }
-
-  void _createRoom() {
-    if (_stage != _CreateStage.idle || _joining) return;
+  Future<void> _createRoom() async {
+    if (_stage != _CreateStage.idle) return;
     setState(() => _stage = _CreateStage.generating);
-    _createTimer = Timer(const Duration(milliseconds: 450), () {
-      final code = '${_pick(2)}-${_pick(3)}';
-      _roomCodeController.text = code;
-      setState(() {
-        _createdCode = code;
-        _stage = _CreateStage.created;
-        _codeCreated = true;
-      });
-      _createResetTimer = Timer(const Duration(milliseconds: 2500), () {
-        setState(() => _stage = _CreateStage.idle);
-      });
-    });
+    widget.onDismissError();
+    try {
+      final roomId = await Signaling.createRoom(widget.backendUrl);
+      if (!mounted) return;
+      widget.onCreateRoom(roomId);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _stage = _CreateStage.idle);
+      widget.onShowError(
+        'Could not reach the signaling server at ${widget.backendUrl}. '
+        'Check the backend URL in Settings.',
+      );
+    }
   }
 
   Future<void> _pasteCode() async {
+    widget.onDismissError();
     String text = '';
     try {
       final data = await Clipboard.getData('text/plain');
@@ -87,22 +68,18 @@ class _RoomCardState extends State<RoomCard> {
     } catch (_) {
       text = '';
     }
-    _roomCodeController.text = text.isEmpty ? 'A7-9QK' : _formatCode(text);
-    _roomCodeFocus.requestFocus();
+    if (!mounted) return;
+    _roomIdController.text = text.trim();
   }
 
   void _joinRoom() {
-    final code = _roomCodeController.text.replaceAll(RegExp('[^A-Za-z0-9]'), '');
-    if (code.length < 5) {
-      widget.onShowError('Please enter a valid 5-6 character room token.');
+    final roomId = _roomIdController.text.trim();
+    if (!RegExp(r'^[A-Za-z0-9_-]{4,64}$').hasMatch(roomId)) {
+      widget.onShowError('Enter a valid room ID from the invite link.');
       return;
     }
-    setState(() => _joining = true);
-    _joinTimer = Timer(const Duration(milliseconds: 900), () {
-      if (!mounted) return;
-      setState(() => _joining = false);
-      widget.onShowError('Peer handshake failed: target node disconnected.');
-    });
+    widget.onDismissError();
+    widget.onJoinRoom(roomId);
   }
 
   @override
@@ -147,17 +124,17 @@ class _RoomCardState extends State<RoomCard> {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.bolt,
+                        const Icon(Icons.hub,
                             size: 14, color: AshColors.outline),
                         const SizedBox(width: 4),
                         Text(
-                          'Handshake time: ~40ms',
+                          'Signaling: ${widget.backendUrl.replaceAll(RegExp(r'^https?://'), '')}',
                           style: AshText.codeSm(AshColors.outline),
                         ),
                       ],
                     ),
                     Text(
-                      'X25519 + ChaCha20',
+                      'relay',
                       style: AshText.codeSm(AshColors.tint),
                     ),
                   ],
@@ -168,11 +145,11 @@ class _RoomCardState extends State<RoomCard> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Peer Room Token',
+                    'Room ID',
                     style: AshText.labelSm(AshColors.onSurfaceVariant),
                   ),
                   Text(
-                    '6 alphanumeric digits',
+                    'invite link or code',
                     style: AshText.codeSm(AshColors.outline),
                   ),
                 ],
@@ -216,18 +193,7 @@ class _RoomCardState extends State<RoomCard> {
             ),
             const SizedBox(width: 12),
             Text(
-              'Generating Noise Keys...',
-              style: AshText.labelMd(dark, weight: FontWeight.w600),
-            ),
-          ],
-        ),
-      _CreateStage.created => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.check, size: 20, color: dark),
-            const SizedBox(width: 8),
-            Text(
-              'Room $_createdCode Created',
+              'Creating room...',
               style: AshText.labelMd(dark, weight: FontWeight.w600),
             ),
           ],
@@ -238,7 +204,7 @@ class _RoomCardState extends State<RoomCard> {
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: _createRoom,
+        onTap: _stage == _CreateStage.idle ? _createRoom : null,
         child: SizedBox(
           height: 48,
           child: Center(child: content),
@@ -256,7 +222,7 @@ class _RoomCardState extends State<RoomCard> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
-              'or join with a code',
+              'or join with a room ID',
               style: AshText.labelSm(AshColors.outline),
             ),
           ),
@@ -268,17 +234,15 @@ class _RoomCardState extends State<RoomCard> {
 
   Widget _buildCodeInput() {
     return TextField(
-      controller: _roomCodeController,
-      focusNode: _roomCodeFocus,
-      inputFormatters: [_RoomCodeFormatter()],
-      textAlign: TextAlign.center,
-      textCapitalization: TextCapitalization.characters,
-      style: AshText.codeMd(AshColors.onSurface).copyWith(letterSpacing: 3.5),
+      controller: _roomIdController,
+      focusNode: _roomIdFocus,
+      autocorrect: false,
+      enableSuggestions: false,
+      style: AshText.codeMd(AshColors.onSurface),
       cursorColor: AshColors.tint,
       decoration: InputDecoration(
-        hintText: 'X9-K2M',
-        hintStyle: AshText.codeMd(AshColors.outline.withValues(alpha: 0.4))
-            .copyWith(letterSpacing: 0),
+        hintText: 'e.g. 8oJtCvIROEw',
+        hintStyle: AshText.codeMd(AshColors.outline.withValues(alpha: 0.4)),
         filled: true,
         fillColor: AshColors.surfaceContainer,
         isDense: true,
@@ -286,7 +250,9 @@ class _RoomCardState extends State<RoomCard> {
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(
-            color: _codeCreated ? AshColors.tint : AshColors.outlineVariant,
+            color: _roomIdController.text.isNotEmpty
+                ? AshColors.tint
+                : AshColors.outlineVariant,
           ),
         ),
         focusedBorder: OutlineInputBorder(
@@ -333,7 +299,7 @@ class _RoomCardState extends State<RoomCard> {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: _joining ? null : _joinRoom,
+        onTap: _joinRoom,
         child: Container(
           height: 48,
           decoration: BoxDecoration(
@@ -342,37 +308,17 @@ class _RoomCardState extends State<RoomCard> {
             borderRadius: BorderRadius.circular(8),
           ),
           child: Center(
-            child: _joining
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AshColors.tint,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        'Connecting...',
-                        style: AshText.labelMd(AshColors.onSurface),
-                      ),
-                    ],
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.hub,
-                          size: 20, color: AshColors.onSurface),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Join room',
-                        style: AshText.labelMd(AshColors.onSurface),
-                      ),
-                    ],
-                  ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.hub, size: 20, color: AshColors.onSurface),
+                const SizedBox(width: 8),
+                Text(
+                  'Join room',
+                  style: AshText.labelMd(AshColors.onSurface),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -394,7 +340,7 @@ class _RoomCardState extends State<RoomCard> {
           Expanded(
             child: Text(
               widget.errorText!,
-              maxLines: 1,
+              maxLines: 3,
               overflow: TextOverflow.ellipsis,
               style: AshText.bodySm(AshColors.error),
             ),
@@ -413,26 +359,6 @@ class _RoomCardState extends State<RoomCard> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _RoomCodeFormatter extends TextInputFormatter {
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    var value = newValue.text
-        .toUpperCase()
-        .replaceAll(RegExp('[^A-Z0-9]'), '');
-    if (value.length > 5) value = value.substring(0, 5);
-    if (value.length > 2) {
-      value = '${value.substring(0, 2)}-${value.substring(2)}';
-    }
-    return TextEditingValue(
-      text: value,
-      selection: TextSelection.collapsed(offset: value.length),
     );
   }
 }

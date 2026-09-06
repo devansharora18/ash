@@ -3,9 +3,16 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 
 class ChatHeader extends StatelessWidget {
-  const ChatHeader({super.key, required this.onBack});
+  const ChatHeader({
+    super.key,
+    required this.onBack,
+    required this.displayName,
+    required this.connected,
+  });
 
   final VoidCallback onBack;
+  final String displayName;
+  final bool connected;
 
   @override
   Widget build(BuildContext context) {
@@ -45,17 +52,19 @@ class ChatHeader extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Encrypted Room',
+                    displayName,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AshText.titleMd(AshColors.onSurface)
                         .copyWith(fontWeight: FontWeight.w600, height: 1.1),
                   ),
                   Text(
-                    'e2ee::direct',
+                    connected ? 'signaling::relay' : 'connecting...',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AshText.codeSm(AshColors.onSurfaceVariant),
+                    style: AshText.codeSm(
+                      connected ? AshColors.tint : AshColors.outline,
+                    ),
                   ),
                 ],
               ),
