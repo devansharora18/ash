@@ -17,7 +17,11 @@ const explainerItems = [
   },
 ]
 
-function HomePage() {
+interface HomePageProps {
+  onEnterChat: () => void
+}
+
+function HomePage({ onEnterChat }: HomePageProps) {
   return (
     <div className="relative flex min-h-[calc(100vh-8rem)] w-full flex-col items-center justify-center px-4 py-8">
       <div className="flex w-full max-w-[420px] flex-col items-center">
@@ -38,7 +42,7 @@ function HomePage() {
           </p>
         </div>
 
-        <RoomActionCard />
+        <RoomActionCard onEnterChat={onEnterChat} />
 
         <div className="mt-6 flex w-full flex-col gap-2.5 px-2">
           {explainerItems.map(({ icon: Icon, text }) => (
