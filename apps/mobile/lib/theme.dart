@@ -17,6 +17,9 @@ abstract final class AshColors {
   static const tint = Color(0xFF00D9FF);
   static const primary = Color(0xFFAFECFF);
   static const tertiary = Color(0xFFFFDEAA);
+  static const onPrimary = Color(0xFF003641);
+  static const onPrimaryFixed = Color(0xFF001F26);
+  static const onErrorContainer = Color(0xFFFFDAD6);
   static const error = Color(0xFFFFB4AB);
   static const errorContainer = Color(0xFF93000A);
 }
