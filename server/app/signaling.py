@@ -18,16 +18,25 @@ def create_room() -> dict:
 
 @router.websocket("/ws/{room_id}")
 async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
+    await websocket.accept()
+
     room = manager.get(room_id)
     if room is None:
-        await websocket.close(code=4404)
+        await websocket.close(code=4404, reason="room not found")
         return
 
-    await websocket.accept()
+    peer_id = peer_id.strip()
+    if not peer_id or len(peer_id) > settings.max_peer_id_length:
+        await websocket.close(code=4400, reason="invalid peer id")
+        return
+    if peer_id in room.peers:
+        await websocket.close(code=4409, reason="peer id already in use")
+        return
+
     peer = Peer(id=peer_id, websocket=websocket)
     if not manager.add_peer(room, peer):
         await websocket.send_json({"type": "error", "message": "room full"})
-        await websocket.close()
+        await websocket.close(code=4409, reason="room full")
         return
 
     try:
@@ -39,19 +48,34 @@ async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
 
         while True:
             raw = await websocket.receive_text()
-            message = json.loads(raw)
+            if len(raw) > settings.max_message_bytes:
+                await websocket.send_json({"type": "error", "message": "message too large"})
+                continue
+
+            try:
+                message = json.loads(raw)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "message": "invalid json"})
+                continue
+
+            if not isinstance(message, dict):
+                await websocket.send_json({"type": "error", "message": "invalid message"})
+                continue
+
             mtype = message.get("type")
 
             if mtype == "signal":
-                target = room.peers.get(message.get("to"))
-                if target is not None:
-                    await target.websocket.send_json(
-                        {
-                            "type": "signal",
-                            "from": peer_id,
-                            "data": message.get("data"),
-                        }
-                    )
+                target_id = message.get("to")
+                if not isinstance(target_id, str) or target_id not in room.peers:
+                    await websocket.send_json({"type": "error", "message": "unknown target"})
+                    continue
+                await room.peers[target_id].websocket.send_json(
+                    {
+                        "type": "signal",
+                        "from": peer_id,
+                        "data": message.get("data"),
+                    }
+                )
             elif mtype == "leave":
                 break
 
