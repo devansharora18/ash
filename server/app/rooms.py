@@ -14,7 +14,7 @@ class Peer:
 @dataclass
 class Room:
     id: str
-    created_at: float = field(default_factory=time.time)
+    last_activity: float = field(default_factory=time.time)
     peers: dict[str, Peer] = field(default_factory=dict)
 
 
@@ -46,8 +46,11 @@ class RoomManager:
     def peers(self, room: Room, exclude: str | None = None) -> list[Peer]:
         return [p for pid, p in room.peers.items() if pid != exclude]
 
+    def touch(self, room: Room) -> None:
+        room.last_activity = time.time()
+
     def cleanup(self) -> None:
         now = time.time()
-        expired = [rid for rid, r in self._rooms.items() if now - r.created_at > self._ttl]
+        expired = [rid for rid, r in self._rooms.items() if now - r.last_activity > self._ttl]
         for rid in expired:
             self._rooms.pop(rid, None)

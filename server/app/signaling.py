@@ -39,6 +39,8 @@ async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
         await websocket.close(code=4409, reason="room full")
         return
 
+    manager.touch(room)
+
     try:
         existing = [p.id for p in manager.peers(room, exclude=peer_id)]
         await websocket.send_json({"type": "welcome", "peer_id": peer_id, "peers": existing})
@@ -76,6 +78,7 @@ async def signaling(websocket: WebSocket, room_id: str, peer_id: str) -> None:
                         "data": message.get("data"),
                     }
                 )
+                manager.touch(room)
             elif mtype == "leave":
                 break
 
