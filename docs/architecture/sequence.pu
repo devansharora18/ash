@@ -1,0 +1,46 @@
+@startuml Ash_Message_Flow_Sequence
+
+skinparam backgroundColor #1a1a1a
+skinparam defaultFontColor #ffffff
+skinparam sequenceArrowColor #00d9ff
+skinparam sequenceLifeLineBorderColor #00d9ff
+skinparam sequenceParticipantBackgroundColor #2d2d2d
+skinparam sequenceParticipantBorderColor #00d9ff
+skinparam sequenceParticipantFontColor #ffffff
+
+title Ash — Room Creation to Teardown
+
+participant "Peer A" as A
+participant "Cloudflare\nTunnel" as CF
+participant "Go Signaling\nServer" as S
+participant "Peer B" as B
+
+A -> CF : Request room creation
+CF -> S : forward (tunnel)
+S -> S : generate room ID\n(in-memory)
+S --> A : room ID + link
+
+A -> B : Share room link (out-of-band)
+
+B -> CF : Join room
+CF -> S : forward (tunnel)
+S -> A : notify peer joined
+S -> B : SDP offer/answer + ICE candidates
+A -> B : SDP offer/answer + ICE candidates
+note over A, B : Exchanged via signaling server\n(server only relays handshake data)
+
+A <-> B : WebRTC DataChannel established\n(DTLS-SRTP, direct P2P)
+
+loop Chat session
+  A -> A : Encrypt msg (libsodium)
+  A -> B : Encrypted payload (P2P, direct)
+  B -> B : Decrypt msg (libsodium)
+end
+
+A -> S : Leave room
+B -> S : Leave room
+S -> S : Destroy room state\n(nothing persisted)
+
+note over S : No logs, no DB entry,\nno recoverable trace
+
+@enduml

@@ -1,0 +1,80 @@
+@startuml Ash_Architecture
+
+skinparam backgroundColor #1a1a1a
+skinparam defaultFontColor #ffffff
+skinparam componentStyle rectangle
+
+skinparam component {
+  BackgroundColor #2d2d2d
+  BorderColor #00d9ff
+  FontColor #ffffff
+}
+skinparam node {
+  BackgroundColor #262626
+  BorderColor #ff6b6b
+  FontColor #ffffff
+}
+skinparam cloud {
+  BackgroundColor #262626
+  BorderColor #ffd93d
+  FontColor #ffffff
+}
+skinparam database {
+  BackgroundColor #3a1a1a
+  BorderColor #ff4444
+  FontColor #ffffff
+}
+
+title Ash — Disposable E2EE P2P Chat Architecture
+
+actor "Peer A\n(Browser)" as ClientA
+actor "Peer B\n(Browser)" as ClientB
+
+node "Laptop (Self-Hosted)" as Laptop {
+  component "Go Signaling Server\n(in-memory only)" as Signal
+  component "Room State\n(ephemeral, no DB)" as RoomState
+}
+
+cloud "Cloudflare Tunnel\n(outbound-only, no port forward)" as CF
+
+database "❌ No Persistent Storage\n(nothing to compel/leak)" as NoDB
+
+package "Encryption Layer (libsodium-wrappers)" as Crypto {
+  component "X25519 Key Exchange" as KX
+  component "XSalsa20-Poly1305\n(crypto_secretbox)" as Enc
+  component "Ed25519\n(host signing/approval)" as Sign
+}
+
+ClientA --> CF : HTTPS/WSS\n(join room, signaling)
+ClientB --> CF : HTTPS/WSS\n(join room, signaling)
+CF --> Signal : forwarded (outbound tunnel)
+
+Signal --> RoomState : track peers\n(in-memory)
+Signal ..> NoDB : never writes here
+
+ClientA <..> ClientB : WebRTC DataChannel\n(Full Mesh, DTLS-SRTP)
+note on link
+  Direct P2P after handshake.
+  Signaling server never sees
+  message content.
+end note
+
+ClientA --> Crypto : encrypt/decrypt locally
+ClientB --> Crypto : encrypt/decrypt locally
+
+note right of Signal
+  Only handles:
+  - peer discovery
+  - SDP/ICE exchange
+  - room lifecycle events
+  Never touches plaintext.
+end note
+
+note bottom of CF
+  Sees: connection metadata
+  (timing, who connected)
+  Never sees: message content
+  (E2EE happens before tunnel)
+end note
+
+@enduml
