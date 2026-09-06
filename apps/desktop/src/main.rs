@@ -1,4 +1,5 @@
 mod backend;
+mod cloudflare;
 mod config;
 
 use config::Config;
@@ -13,6 +14,7 @@ fn App() -> Element {
     let mut config = use_signal(Config::load);
     let mut status = use_signal(|| "Not tested".to_string());
     let mut testing = use_signal(|| false);
+    let mut logged_in = use_signal(cloudflare::is_logged_in);
 
     let run_check = move |_| {
         let url = config.read().backend_url.clone();
@@ -62,6 +64,22 @@ fn App() -> Element {
 
             p { style: "color: #666",
                 "{status}"
+            }
+
+            h2 { "Cloudflare" }
+            if logged_in() {
+                p { style: "color: #18794e",
+                    "Authenticated — cert.pem found."
+                }
+            } else {
+                p { style: "color: #b3261e",
+                    "Not authenticated. Run this in a terminal, then Re-check:"
+                }
+                pre { "cloudflared tunnel login" }
+            }
+            button {
+                onclick: move |_| logged_in.set(cloudflare::is_logged_in()),
+                "Re-check"
             }
         }
     }
