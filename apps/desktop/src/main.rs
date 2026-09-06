@@ -1,7 +1,10 @@
 mod backend;
 mod cloudflare;
 mod config;
+mod deploy;
 mod tunnel;
+
+use std::sync::{Arc, Mutex};
 
 use config::{validate_hostname, Config};
 use dioxus::prelude::*;
@@ -17,6 +20,8 @@ fn App() -> Element {
     let mut testing = use_signal(|| false);
     let mut logged_in = use_signal(cloudflare::is_logged_in);
     let mut tunnel_status = use_signal(|| "Not created".to_string());
+    let mut deploy_status = use_signal(|| "Not deployed".to_string());
+    let mut tunnel_child: Signal<Option<Arc<Mutex<tokio::process::Child>>>> = use_signal(|| None);
 
     let run_check = move |_| {
         let url = config.read().backend_url.clone();
@@ -48,12 +53,27 @@ fn App() -> Element {
         spawn(async move {
             match tunnel::ensure_binary().await {
                 Err(e) => tunnel_status.set(format!("Download failed: {e}")),
-                Ok(bin) => match tunnel::create(&bin, &name).await {
-                    Ok(msg) => {
-                        tunnel_status.set(format!("Tunnel `{name}` ready. {}", msg.trim()));
-                    }
+                Ok(bin) => match tunnel::ensure(&bin, &name).await {
+                    Ok(msg) => tunnel_status.set(msg.trim().to_string()),
                     Err(e) => tunnel_status.set(format!("Create failed: {e}")),
                 },
+            }
+        });
+    };
+
+    let run_deploy = move |_| {
+        let backend_url = config.read().backend_url.clone();
+        let hostname = config.read().hostname.clone();
+        let tunnel_name = config.read().tunnel_name.clone();
+        deploy_status.set("Deploying…".to_string());
+        spawn(async move {
+            match deploy::deploy(&backend_url, &hostname, &tunnel_name).await {
+                Ok(res) => {
+                    let url = res.public_url.clone();
+                    *tunnel_child.write() = Some(Arc::new(Mutex::new(res.child)));
+                    deploy_status.set(format!("Deployed — {url}"));
+                }
+                Err(e) => deploy_status.set(format!("Deploy failed: {e}")),
             }
         });
     };
@@ -119,6 +139,12 @@ fn App() -> Element {
             button { onclick: create_tunnel, "Create Tunnel" }
             p { style: "color: #666",
                 "{tunnel_status}"
+            }
+
+            h2 { "Deploy" }
+            button { onclick: run_deploy, "Deploy" }
+            p { style: "color: #666",
+                "{deploy_status}"
             }
         }
     }

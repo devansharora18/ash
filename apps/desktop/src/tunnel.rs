@@ -1,6 +1,8 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
+
 pub fn release_name(os: &str, arch: &str) -> &'static str {
     match (os, arch) {
         ("linux", "x86_64") => "cloudflared-linux-amd64",
@@ -88,17 +90,81 @@ pub async fn ensure_binary() -> Result<PathBuf, String> {
     Ok(dest)
 }
 
-pub async fn create(bin: &Path, name: &str) -> Result<String, String> {
-    let output = tokio::process::Command::new(bin)
-        .args(["tunnel", "create", name])
-        .output()
-        .await
-        .map_err(|e| format!("failed to run cloudflared: {e}"))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("tunnel create failed: {}", stderr.trim()));
+async fn run_cloudflared(bin: &Path, args: &[&str]) -> Result<String, String> {
+    const ATTEMPTS: u32 = 3;
+    let mut last_err = String::new();
+    for attempt in 1..=ATTEMPTS {
+        let output = tokio::process::Command::new(bin)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| format!("failed to run cloudflared: {e}"))?;
+        if output.status.success() {
+            return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        last_err = stderr.clone();
+        let transient = [
+            "connection reset",
+            "connection refused",
+            "tcp",
+            "timeout",
+            "i/o timeout",
+            "eof",
+        ]
+        .iter()
+        .any(|s| stderr.to_ascii_lowercase().contains(s));
+        if !transient || attempt == ATTEMPTS {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(800 * attempt as u64)).await;
     }
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+    Err(last_err)
+}
+
+pub async fn create(bin: &Path, name: &str) -> Result<String, String> {
+    run_cloudflared(bin, &["tunnel", "create", name])
+        .await
+        .map_err(|e| format!("tunnel create failed: {e}"))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Tunnel {
+    pub name: String,
+}
+
+pub async fn list(bin: &Path) -> Result<Vec<Tunnel>, String> {
+    let out = run_cloudflared(bin, &["tunnel", "list", "--output", "json"])
+        .await
+        .map_err(|e| format!("tunnel list failed: {e}"))?;
+    serde_json::from_str(&out).map_err(|e| format!("parse tunnel list: {e}"))
+}
+
+pub async fn ensure(bin: &Path, name: &str) -> Result<String, String> {
+    let tunnels = list(bin).await?;
+    if tunnels.iter().any(|t| t.name == name) {
+        return Ok(format!("tunnel `{name}` already exists"));
+    }
+    create(bin, name).await
+}
+
+pub async fn route_dns(bin: &Path, name: &str, hostname: &str) -> Result<String, String> {
+    run_cloudflared(bin, &["tunnel", "route", "dns", name, hostname])
+        .await
+        .map_err(|e| format!("route dns failed: {e}"))
+}
+
+pub async fn spawn_run(
+    bin: &Path,
+    name: &str,
+    url: &str,
+) -> Result<tokio::process::Child, String> {
+    tokio::process::Command::new(bin)
+        .args(["tunnel", "run", "--url", url, name])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("failed to start tunnel: {e}"))
 }
 
 #[cfg(test)]
@@ -126,5 +192,13 @@ mod tests {
         assert_eq!(search_path_in(&path_var, "missing"), None);
 
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn parses_tunnel_list_json() {
+        let json = r#"[{"id":"35dcac26-43cb-4ee7-8d1e-c1ad208411ce","name":"ash","created_at":"2026-09-06T19:35:19Z","deleted_at":"0001-01-01T00:00:00Z","connections":[]}]"#;
+        let tunnels: Vec<Tunnel> = serde_json::from_str(json).unwrap();
+        assert_eq!(tunnels.len(), 1);
+        assert_eq!(tunnels[0].name, "ash");
     }
 }
