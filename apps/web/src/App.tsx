@@ -7,10 +7,22 @@ import ChatPage from './features/chat/chat_page'
 import HomePage from './features/home/home_page'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
 
+function initialRoom(): string | null {
+  return new URLSearchParams(window.location.search).get('room')
+}
+
 function App() {
-  const [page, setPage] = useState<'home' | 'chat'>('home')
+  const [page, setPage] = useState<'home' | 'chat'>(
+    initialRoom() ? 'chat' : 'home',
+  )
+  const [roomId, setRoomId] = useState<string | null>(initialRoom())
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  const enterChat = (id: string) => {
+    setRoomId(id)
+    setPage('chat')
+  }
 
   const handleSaveSettings = (displayName: string, backendUrl: string) => {
     const next: Settings = { displayName, backendUrl }
@@ -18,8 +30,21 @@ function App() {
     saveSettings(next)
   }
 
-  if (page === 'chat') {
-    return <ChatPage />
+  const handleLeave = () => {
+    setRoomId(null)
+    setPage('home')
+    window.history.replaceState(null, '', window.location.pathname)
+  }
+
+  if (page === 'chat' && roomId) {
+    return (
+      <ChatPage
+        displayName={settings.displayName}
+        backendUrl={settings.backendUrl}
+        roomId={roomId}
+        onLeave={handleLeave}
+      />
+    )
   }
 
   return (
@@ -27,7 +52,9 @@ function App() {
       <SiteHeader />
       <main className="w-full flex-1 pt-12">
         <HomePage
-          onEnterChat={() => setPage('chat')}
+          backendUrl={settings.backendUrl}
+          onCreateRoom={enterChat}
+          onJoinRoom={enterChat}
           onOpenSettings={() => setSettingsOpen(true)}
         />
       </main>

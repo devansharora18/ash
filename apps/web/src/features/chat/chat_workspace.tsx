@@ -9,7 +9,10 @@ export type ChatView = 'chat' | 'empty' | 'loading'
 interface ChatWorkspaceProps {
   view: ChatView
   onViewChange: (view: ChatView) => void
-  sentMessages: ChatMessage[]
+  roomId: string
+  messages: ChatMessage[]
+  peersOnline: number
+  statusMessage: string | null
   onSend: (text: string) => void
   onIncinerate: () => void
 }
@@ -64,7 +67,10 @@ function Skeleton() {
 function ChatWorkspace({
   view,
   onViewChange,
-  sentMessages,
+  roomId,
+  messages,
+  peersOnline,
+  statusMessage,
   onSend,
   onIncinerate,
 }: ChatWorkspaceProps) {
@@ -73,17 +79,17 @@ function ChatWorkspace({
   useEffect(() => {
     const el = viewportRef.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [sentMessages.length])
+  }, [messages.length, view])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-surface-container-lowest">
       <div className="flex h-12 shrink-0 items-center justify-between bg-surface-container-lowest px-6">
         <div className="flex min-w-0 items-center gap-3">
           <span className="truncate font-sans text-body-base-medium text-on-surface">
-            #delta-protocol
+            #{roomId.slice(0, 8)}
           </span>
           <span className="rounded bg-surface-container-low px-2 py-0.5 font-mono text-code-inline text-on-surface-variant">
-            ash-8492
+            {roomId}
           </span>
           <div className="hidden items-center gap-1.5 font-sans text-caption text-outline md:flex">
             <Lock className="h-3.5 w-3.5" />
@@ -123,7 +129,15 @@ function ChatWorkspace({
         className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto px-6 py-6"
       >
         <div className="mx-auto flex w-full max-w-[760px] flex-col space-y-4">
-          {view === 'chat' && <MessageFeed sentMessages={sentMessages} />}
+          {statusMessage && (
+            <div className="flex items-center gap-2 rounded-lg bg-surface-container-low px-3 py-2 font-sans text-caption text-on-surface-variant">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary-container" />
+              {statusMessage}
+            </div>
+          )}
+          {view === 'chat' && (
+            <MessageFeed messages={messages} peersOnline={peersOnline} />
+          )}
           {view === 'empty' && <EmptyState />}
           {view === 'loading' && <Skeleton />}
         </div>

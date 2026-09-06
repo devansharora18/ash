@@ -18,11 +18,18 @@ const explainerItems = [
 ]
 
 interface HomePageProps {
-  onEnterChat: () => void
+  backendUrl: string
+  onCreateRoom: (roomId: string) => void
+  onJoinRoom: (roomId: string) => void
   onOpenSettings: () => void
 }
 
-function HomePage({ onEnterChat, onOpenSettings }: HomePageProps) {
+function HomePage({
+  backendUrl,
+  onCreateRoom,
+  onJoinRoom,
+  onOpenSettings,
+}: HomePageProps) {
   return (
     <div className="relative flex min-h-[calc(100vh-8rem)] w-full flex-col items-center justify-center px-4 py-8">
       <button
@@ -51,7 +58,11 @@ function HomePage({ onEnterChat, onOpenSettings }: HomePageProps) {
           </p>
         </div>
 
-        <RoomActionCard onEnterChat={onEnterChat} />
+        <RoomActionCard
+          backendUrl={backendUrl}
+          onCreateRoom={onCreateRoom}
+          onJoinRoom={onJoinRoom}
+        />
 
         <div className="mt-6 flex w-full flex-col gap-2.5 px-2">
           {explainerItems.map(({ icon: Icon, text }) => (
