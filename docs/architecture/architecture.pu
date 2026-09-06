@@ -31,7 +31,7 @@ actor "Peer A\n(Browser)" as ClientA
 actor "Peer B\n(Browser)" as ClientB
 
 node "Laptop (Self-Hosted)" as Laptop {
-  component "Go Signaling Server\n(in-memory only)" as Signal
+  component "FastAPI Signaling Server\n(Python, in-memory only)" as Signal
   component "Room State\n(ephemeral, no DB)" as RoomState
 }
 

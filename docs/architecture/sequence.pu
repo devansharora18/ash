@@ -12,7 +12,7 @@ title Ash — Room Creation to Teardown
 
 participant "Peer A" as A
 participant "Cloudflare\nTunnel" as CF
-participant "Go Signaling\nServer" as S
+participant "FastAPI Signaling\nServer (Python)" as S
 participant "Peer B" as B
 
 A -> CF : Request room creation
