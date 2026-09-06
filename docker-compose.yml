@@ -1,0 +1,20 @@
+services:
+  signaling:
+    build: ./server
+    environment:
+      ASH_HOST: 0.0.0.0
+      ASH_PORT: 8000
+      ASH_ALLOWED_ORIGINS: '["http://localhost:5173","http://localhost:4173"]'
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  # Optional public exposure. Requires a valid tunnel token in .env.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}
+    depends_on:
+      - signaling
+    restart: unless-stopped

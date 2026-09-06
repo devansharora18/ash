@@ -1,0 +1,20 @@
+# Locally-managed Cloudflare Tunnel (alternative to the token approach).
+#
+# Copy to `config.yml`, then:
+#   1. `cloudflared tunnel create ash`          -> prints <TUNNEL_ID>
+#   2. Replace YOUR_UUID_UUID with <TUNNEL_ID> (both `tunnel:` and `credentials-file:`)
+#   3. `cloudflared tunnel route dns ash chat.example.com`
+#   4. `cloudflared tunnel --config config.yml run ash`
+#
+# Ingress maps your public hostname to the signaling service.
+# If running `cloudflared` inside docker-compose next to `signaling`,
+# use `http://signaling:8000`. Standalone (on the same host) use
+# `http://localhost:8000`.
+
+tunnel: YOUR_UUID_UUID
+credentials-file: /home/nonroot/.cloudflared/YOUR_UUID_UUID.json
+
+ingress:
+  - hostname: chat.example.com
+    service: http://localhost:8000
+  - service: http_status:404
