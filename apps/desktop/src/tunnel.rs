@@ -158,12 +158,17 @@ pub async fn route_dns(bin: &Path, name: &str, hostname: &str) -> Result<String,
     match run_cloudflared(bin, &["tunnel", "route", "dns", name, hostname]).await {
         Ok(out) => Ok(out),
         Err(e) => {
-            // Re-running deploy is idempotent: the CNAME already points at this
-            // tunnel, so a pre-existing record is not an error.
             if e.to_ascii_lowercase()
                 .contains("record with that host already exists")
             {
-                Ok(format!("route for `{hostname}` already exists"))
+                // A record exists but may point somewhere stale. Overwrite it
+                // with the CNAME for this tunnel so the hostname actually routes.
+                run_cloudflared(
+                    bin,
+                    &["tunnel", "route", "dns", "--overwrite-dns", name, hostname],
+                )
+                .await
+                .map_err(|e| format!("route dns failed: {e}"))
             } else {
                 Err(format!("route dns failed: {e}"))
             }
