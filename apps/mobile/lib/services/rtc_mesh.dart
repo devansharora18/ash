@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 
+import 'crypto_service.dart';
 import 'settings_service.dart';
 
 /// Build the ICE server list for flutter_webrtc: always the STUN fallback,
@@ -110,15 +111,19 @@ class _PeerConn {
 /// peers never both send an offer. The wire format matches the web client so
 /// web and mobile peers can interoperate.
 class RtcMesh {
-  RtcMesh(this.selfId, this.sendSignal, this.callbacks, [this.iceServers]);
+  RtcMesh(this.selfId, this.sendSignal, this.callbacks, this.identity,
+      [this.iceServers]);
 
   final String selfId;
   final void Function(String to, Object data) sendSignal;
   final RtcMeshCallbacks callbacks;
+  final Identity identity;
   final List<Map<String, dynamic>>? iceServers;
 
   final Map<String, _PeerConn> _conns = {};
   MediaStream? _shareStream;
+  final Map<String, Uint8List> _sessionKey = {};
+  final Map<String, String> _peerPub = {};
 
   Future<void> addPeer(String peerId) async {
     if (_conns.containsKey(peerId)) return;
@@ -174,28 +179,100 @@ class RtcMesh {
     channel.stateChangeStream.listen((state) {
       if (state == RTCDataChannelState.RTCDataChannelOpen) {
         callbacks.onConnectionChange?.call(peerId, true);
+        unawaited(channel.send(RTCDataChannelMessage(jsonEncode({
+          'kind': 'e2ee',
+          'action': 'key',
+          'pub': identity.pubB64,
+        }))));
       } else if (state == RTCDataChannelState.RTCDataChannelClosed) {
         callbacks.onConnectionChange?.call(peerId, false);
       }
     });
     channel.messageStream.listen((message) {
       if (message.isBinary) {
-        _handleFileChunk(peerId, message.binary);
+        unawaited(_handleFileChunk(peerId, message.binary));
         return;
       }
       try {
         final data = jsonDecode(message.text) as Map<String, dynamic>;
-        if (data['kind'] == 'chat' && data['text'] is String) {
-          callbacks.onMessage?.call(peerId, data['text'] as String);
-        } else if (data['kind'] == 'file' || data['kind'] == 'voice') {
-          _handleFileControl(peerId, channel, data);
-        } else if (data['kind'] == 'board') {
-          callbacks.onBoard?.call(peerId, data);
+        if (data['kind'] == 'e2ee' &&
+            data['action'] == 'key' &&
+            data['pub'] is String) {
+          _peerPub[peerId] = data['pub'] as String;
+          unawaited(ensureSessionKey(peerId));
+        } else if (data['kind'] == 'esc' &&
+            data['nonce'] is String &&
+            data['ct'] is String) {
+          unawaited(handleDecrypted(peerId, channel,
+              data['nonce'] as String, data['ct'] as String));
         }
       } catch (_) {
         // ignore malformed frames
       }
     });
+  }
+
+  Future<Uint8List?> ensureSessionKey(String peerId) async {
+    final cached = _sessionKey[peerId];
+    if (cached != null) return cached;
+    final pub = _peerPub[peerId];
+    if (pub == null) return null;
+    try {
+      final key = deriveSessionKey(identity, pub);
+      _sessionKey[peerId] = key;
+      return key;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Encrypt an inner message with the peer's session key and send it as an
+  /// `{kind:'esc'}` frame.
+  Future<bool> encryptJsonTo(
+    String peerId,
+    RTCDataChannel channel,
+    Object inner,
+  ) async {
+    final key = await ensureSessionKey(peerId);
+    if (key == null) return false;
+    try {
+      final data = Uint8List.fromList(utf8.encode(jsonEncode(inner)));
+      final nonce = newNonce();
+      final ct = encryptBlock(key, nonce, data);
+      unawaited(channel.send(RTCDataChannelMessage(jsonEncode({
+        'kind': 'esc',
+        'nonce': base64Encode(nonce),
+        'ct': base64Encode(ct),
+      }))));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> handleDecrypted(
+    String peerId,
+    RTCDataChannel channel,
+    String nonceB64,
+    String ctB64,
+  ) async {
+    final key = await ensureSessionKey(peerId);
+    if (key == null) return;
+    try {
+      final plain = decryptBlock(key, base64Decode(nonceB64), base64Decode(ctB64));
+      final inner = jsonDecode(utf8.decode(plain)) as Map<String, dynamic>;
+      if (inner['kind'] == 'chat' && inner['text'] is String) {
+        callbacks.onMessage?.call(peerId, inner['text'] as String);
+      } else if (inner['kind'] == 'file' || inner['kind'] == 'voice') {
+        _handleFileControl(peerId, channel, inner);
+      } else if (inner['kind'] == 'board') {
+        callbacks.onBoard?.call(peerId, inner);
+      }
+    } on DecryptFailure {
+      // drop unreadable payloads
+    } catch (_) {
+      // ignore
+    }
   }
 
   static String _fileId() {
@@ -206,7 +283,7 @@ class RtcMesh {
   }
 
   /// Propose a file to one peer; the peer must accept before chunks flow.
-  void sendFile(String peerId, String name, Uint8List bytes) {
+  Future<void> sendFile(String peerId, String name, Uint8List bytes) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     if (conn == null ||
@@ -222,18 +299,18 @@ class RtcMesh {
       ..outSize = bytes.length
       ..outSeq = 0
       ..outBytes = bytes;
-    channel.send(RTCDataChannelMessage(jsonEncode({
+    await encryptJsonTo(peerId, channel, {
       'kind': 'file',
       'action': 'offer',
       'id': id,
       'name': name,
       'size': bytes.length,
       'mime': '',
-    })));
+    });
   }
 
   /// Send a voice recording blob to one peer (auto-accepted on receive).
-  void sendVoice(String peerId, Uint8List bytes, int durationSec) {
+  Future<void> sendVoice(String peerId, Uint8List bytes, int durationSec) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     if (conn == null ||
@@ -249,7 +326,7 @@ class RtcMesh {
       ..outSize = bytes.length
       ..outSeq = 0
       ..outBytes = bytes;
-    channel.send(RTCDataChannelMessage(jsonEncode({
+    await encryptJsonTo(peerId, channel, {
       'kind': 'voice',
       'action': 'offer',
       'id': id,
@@ -257,10 +334,10 @@ class RtcMesh {
       'size': bytes.length,
       'mime': 'audio/m4a',
       'durationMs': durationSec * 1000,
-    })));
+    });
   }
 
-  void acceptFile(String peerId, String id) {
+  Future<void> acceptFile(String peerId, String id) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     final offer = conn?.pendingOffer;
@@ -273,26 +350,18 @@ class RtcMesh {
       ..inReceived = 0
       ..inParts.clear()
       ..pendingOffer = null;
-    channel.send(RTCDataChannelMessage(jsonEncode({
-      'kind': 'file',
-      'action': 'accept',
-      'id': id,
-    })));
+    await encryptJsonTo(peerId, channel, {'kind': 'file', 'action': 'accept', 'id': id});
   }
 
-  void declineFile(String peerId, String id) {
+  Future<void> declineFile(String peerId, String id) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     if (conn == null || channel == null) return;
     if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
-    channel.send(RTCDataChannelMessage(jsonEncode({
-      'kind': 'file',
-      'action': 'decline',
-      'id': id,
-    })));
+    await encryptJsonTo(peerId, channel, {'kind': 'file', 'action': 'decline', 'id': id});
   }
 
-  void cancelFile(String peerId, String id) {
+  Future<void> cancelFile(String peerId, String id) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     if (conn != null) {
@@ -315,11 +384,7 @@ class RtcMesh {
       if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
     }
     if (channel != null) {
-      channel.send(RTCDataChannelMessage(jsonEncode({
-        'kind': 'file',
-        'action': 'cancel',
-        'id': id,
-      })));
+      await encryptJsonTo(peerId, channel, {'kind': 'file', 'action': 'cancel', 'id': id});
     }
   }
 
@@ -344,11 +409,11 @@ class RtcMesh {
               ..inSize = (msg['size'] as num?)?.toInt() ?? 0
               ..inReceived = 0
               ..inParts.clear();
-            channel.send(RTCDataChannelMessage(jsonEncode({
+            unawaited(encryptJsonTo(peerId, channel, {
               'kind': 'voice',
               'action': 'accept',
               'id': id,
-            })));
+            }));
           }
         } else if (id != null && conn.pendingOffer == null && !conn.receiving) {
           conn.pendingOffer = msg;
@@ -359,11 +424,11 @@ class RtcMesh {
             (msg['size'] as num?)?.toInt() ?? 0,
           );
         } else if (id != null) {
-          channel.send(RTCDataChannelMessage(jsonEncode({
+          unawaited(encryptJsonTo(peerId, channel, {
             'kind': 'file',
             'action': 'decline',
             'id': id,
-          })));
+          }));
         }
       case 'accept':
         if (conn.sending && conn.outId == id) {
@@ -410,6 +475,8 @@ class RtcMesh {
   ) async {
     final bytes = conn.outBytes;
     if (bytes == null) return;
+    final key = await ensureSessionKey(peerId);
+    if (key == null) return;
     const chunk = 16384;
     const backpressure = 1 << 21; // ~2MB queued before we wait
     while (conn.outSeq < conn.outSize) {
@@ -421,7 +488,16 @@ class RtcMesh {
       if (channel.state != RTCDataChannelState.RTCDataChannelOpen) break;
       final end = math.min(conn.outSize, conn.outSeq + chunk);
       final slice = Uint8List.fromList(bytes.sublist(conn.outSeq, end));
-      await channel.send(RTCDataChannelMessage.fromBinary(slice));
+      try {
+        final nonce = newNonce();
+        final ct = encryptBlock(key, nonce, slice);
+        final framed = Uint8List(12 + ct.length);
+        framed.setRange(0, 12, nonce);
+        framed.setRange(12, framed.length, ct);
+        await channel.send(RTCDataChannelMessage.fromBinary(framed));
+      } catch (_) {
+        break; // encryption failure
+      }
       conn.outSeq = end;
       callbacks.onFileProgress?.call(
         peerId,
@@ -446,11 +522,27 @@ class RtcMesh {
     }
   }
 
-  void _handleFileChunk(String peerId, Uint8List data) {
+  Future<void> _handleFileChunk(String peerId, Uint8List data) async {
     final conn = _conns[peerId];
     if (conn == null || conn.inId == null) return;
-    conn.inParts.add(data);
-    conn.inReceived += data.length;
+    final key = await ensureSessionKey(peerId);
+    if (key == null) return;
+    Uint8List plain;
+    try {
+      plain = decryptBlock(key, data.sublist(0, 12), data.sublist(12));
+    } on DecryptFailure {
+      conn
+        ..inId = null
+        ..inName = null
+        ..inSize = 0
+        ..inReceived = 0
+        ..inKind = null
+        ..inDurationMs = 0
+        ..inParts.clear();
+      return;
+    }
+    conn.inParts.add(plain);
+    conn.inReceived += plain.length;
     callbacks.onFileProgress?.call(
       peerId,
       conn.inId!,
@@ -549,31 +641,29 @@ class RtcMesh {
         raw['sdpMLineIndex'] as int?,
       );
 
-  void broadcast(String text) {
-    final payload = jsonEncode({'kind': 'chat', 'text': text});
-    for (final conn in _conns.values) {
-      final channel = conn.channel;
+  Future<void> broadcast(String text) async {
+    for (final entry in _conns.entries) {
+      final channel = entry.value.channel;
       if (channel != null &&
           channel.state == RTCDataChannelState.RTCDataChannelOpen) {
-        unawaited(channel.send(RTCDataChannelMessage(payload)));
+        await encryptJsonTo(entry.key, channel, {'kind': 'chat', 'text': text});
       }
     }
   }
 
   /// Stream a whiteboard drawing event to every connected peer.
-  void broadcastBoard(Map<String, dynamic> event) {
-    final payload = jsonEncode({'kind': 'board', ...event});
-    for (final conn in _conns.values) {
-      final channel = conn.channel;
+  Future<void> broadcastBoard(Map<String, dynamic> event) async {
+    for (final entry in _conns.entries) {
+      final channel = entry.value.channel;
       if (channel != null &&
           channel.state == RTCDataChannelState.RTCDataChannelOpen) {
-        unawaited(channel.send(RTCDataChannelMessage(payload)));
+        await encryptJsonTo(entry.key, channel, {'kind': 'board', ...event});
       }
     }
   }
 
   /// Send the full board state to one peer (late-join sync).
-  void sendBoardSync(String peerId, List<Map<String, dynamic>> strokes) {
+  Future<void> sendBoardSync(String peerId, List<Map<String, dynamic>> strokes) async {
     final conn = _conns[peerId];
     final channel = conn?.channel;
     if (conn == null ||
@@ -581,11 +671,11 @@ class RtcMesh {
         channel.state != RTCDataChannelState.RTCDataChannelOpen) {
       return;
     }
-    unawaited(channel.send(RTCDataChannelMessage(jsonEncode({
+    await encryptJsonTo(peerId, channel, {
       'kind': 'board',
       'type': 'sync',
       'strokes': strokes,
-    }))));
+    });
   }
 
   Future<void> close() async {

@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../services/crypto_service.dart';
 import '../../services/rtc_mesh.dart';
 import '../../services/signaling.dart';
 import '../../theme.dart';
@@ -136,6 +137,18 @@ class _ChatScreenState extends State<ChatScreen> {
       roomId: widget.roomId,
       peerId: widget.displayName,
     );
+    unawaited(_setupMesh(connect));
+  }
+
+  Future<void> _setupMesh(
+    SignalClient Function({
+      required String backendUrl,
+      required String roomId,
+      required String peerId,
+    }) connect,
+  ) async {
+    final identity = await loadOrCreateIdentity();
+    if (!mounted) return;
     _mesh = RtcMesh(
       widget.displayName,
       (to, data) {
@@ -148,7 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ..onConnectionChange = (peerId, connected) {
           setState(() => _connections[peerId] = connected);
           if (connected && _strokes.isNotEmpty) {
-            _mesh?.sendBoardSync(peerId, _strokesRef);
+            unawaited(_mesh?.sendBoardSync(peerId, _strokesRef));
           }
           if (connected && _sharingScreen) {
             unawaited(_mesh?.attachScreenShare(peerId));
@@ -234,6 +247,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ..onVoice = (from, name, bytes, durationSec) {
           _addVoiceMessage(self: false, author: from, bytes: bytes, durationSec: durationSec);
         },
+      identity,
       widget.iceServers,
     );
     _sub = _signaling!.events.listen(_onEvent);
