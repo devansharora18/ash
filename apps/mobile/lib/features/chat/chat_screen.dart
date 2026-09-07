@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../services/rtc_mesh.dart';
 import '../../services/signaling.dart';
@@ -55,6 +59,26 @@ class _ChatMessage {
 
 enum _ChatStatus { connecting, connected, error }
 
+class _TransferItem {
+  _TransferItem({
+    required this.peerId,
+    required this.id,
+    required this.name,
+    required this.size,
+    required this.sent,
+    required this.isSend,
+  });
+
+  final String peerId;
+  final String id;
+  final String name;
+  final int size;
+  int sent;
+  final bool isSend;
+
+  String get key => '$peerId/$id';
+}
+
 class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -66,6 +90,9 @@ class _ChatScreenState extends State<ChatScreen> {
   RtcMesh? _mesh;
   _ChatStatus _status = _ChatStatus.connecting;
   String? _errorMessage;
+
+  Map<String, dynamic>? _incomingFile;
+  final Map<String, _TransferItem> _transfers = {};
 
   int get _connectedCount => _connections.values.where((v) => v).length;
 
@@ -93,6 +120,42 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         ..onConnectionChange = (peerId, connected) {
           setState(() => _connections[peerId] = connected);
+        }
+        ..onFileOffer = (from, id, name, size) {
+          setState(() => _incomingFile = {
+            'from': from,
+            'id': id,
+            'name': name,
+            'size': size,
+          });
+        }
+        ..onFileProgress = (peerId, id, name, size, sent, isSend) {
+          setState(() {
+            final key = '$peerId/$id';
+            final item = _transfers[key];
+            if (item == null) {
+              _transfers[key] = _TransferItem(
+                peerId: peerId,
+                id: id,
+                name: name,
+                size: size,
+                sent: sent,
+                isSend: isSend,
+              );
+            } else {
+              item.sent = sent;
+            }
+          });
+        }
+        ..onFileComplete = (from, id, name, bytes) {
+          _transfers.remove('$from/$id');
+          unawaited(_saveIncoming(name, bytes));
+        }
+        ..onFileCancelled = (peerId) {
+          setState(() {
+            _transfers.removeWhere((_, t) => t.peerId == peerId);
+            if (_incomingFile?['from'] == peerId) _incomingFile = null;
+          });
         },
       widget.iceServers,
     );
@@ -194,6 +257,86 @@ class _ChatScreenState extends State<ChatScreen> {
     _mesh!.broadcast(text);
   }
 
+  Future<void> _pickFile() async {
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.single;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    final connected = _peers
+        .where((p) => _connections[p] == true)
+        .toList(growable: false);
+    if (!mounted) return;
+    if (connected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No peer connected to send a file to.')),
+      );
+      return;
+    }
+
+    String? peer;
+    if (connected.length == 1) {
+      peer = connected.first;
+    } else {
+      peer = await showDialog<String>(
+        context: context,
+        builder: (ctx) => SimpleDialog(
+          title: const Text('Send file to'),
+          backgroundColor: AshColors.surfaceContainer,
+          children: [
+            for (final p in connected)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop(p),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Text(p, style: AshText.bodyMd(AshColors.onSurface)),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    if (peer == null || !mounted) return;
+    _mesh?.sendFile(peer, file.name, bytes);
+    _addMessage(
+      self: true,
+      author: widget.displayName,
+      text: 'Sent file · ${file.name}',
+    );
+  }
+
+  void _acceptIncoming() {
+    final file = _incomingFile;
+    if (file == null) return;
+    _mesh?.acceptFile(file['from'] as String, file['id'] as String);
+    setState(() => _incomingFile = null);
+  }
+
+  void _declineIncoming() {
+    final file = _incomingFile;
+    if (file == null) return;
+    _mesh?.declineFile(file['from'] as String, file['id'] as String);
+    setState(() => _incomingFile = null);
+  }
+
+  Future<void> _saveIncoming(String name, Uint8List bytes) async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$name');
+      await file.writeAsBytes(bytes, flush: true);
+      if (mounted) {
+        _addMessage(
+          self: false,
+          author: 'System',
+          text: 'Received file · $name',
+        );
+      }
+    } catch (_) {
+      // ignore save failures
+    }
+  }
+
   Future<void> _confirmLeave() async {
     final leave = await showDialog<bool>(
       context: context,
@@ -237,6 +380,19 @@ class _ChatScreenState extends State<ChatScreen> {
                   connected: connected,
                   onLeave: _confirmLeave,
                 ),
+                if (_incomingFile != null) _IncomingFileBar(
+                  name: _incomingFile!['name'] as String,
+                  onAccept: _acceptIncoming,
+                  onDecline: _declineIncoming,
+                ),
+                if (_transfers.isNotEmpty)
+                  _TransfersPanel(
+                    transfers: _transfers.values.toList(growable: false),
+                    onCancel: (item) {
+                      _mesh?.cancelFile(item.peerId, item.id);
+                      setState(() => _transfers.remove(item.key));
+                    },
+                  ),
                 if (_status == _ChatStatus.error) ...[
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -294,11 +450,116 @@ class _ChatScreenState extends State<ChatScreen> {
                     ],
                   ),
                 ),
-                Composer(onSend: _sendMessage),
+                Composer(onSend: _sendMessage, onAttach: _pickFile),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _IncomingFileBar extends StatelessWidget {
+  const _IncomingFileBar({
+    required this.name,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final String name;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AshColors.surfaceContainer,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.insert_drive_file, size: 18, color: AshColors.tint),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Incoming file · $name',
+                overflow: TextOverflow.ellipsis,
+                style: AshText.bodyMd(AshColors.onSurface),
+              ),
+            ),
+            TextButton(onPressed: onDecline, child: const Text('Decline')),
+            TextButton(onPressed: onAccept, child: const Text('Accept')),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TransfersPanel extends StatelessWidget {
+  const _TransfersPanel({required this.transfers, required this.onCancel});
+
+  final List<_TransferItem> transfers;
+  final void Function(_TransferItem) onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final t in transfers) ...[
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AshColors.surfaceContainer,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          t.name,
+                          overflow: TextOverflow.ellipsis,
+                          style: AshText.bodyMd(AshColors.onSurface),
+                        ),
+                      ),
+                      IconButton(
+                        iconSize: 18,
+                        visualDensity: VisualDensity.compact,
+                        color: AshColors.outline,
+                        onPressed: () => onCancel(t),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  LinearProgressIndicator(
+                    value: t.size > 0 ? (t.sent / t.size).clamp(0.0, 1.0) : 0,
+                    color: AshColors.tint,
+                    backgroundColor: AshColors.surfaceContainerHigh,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${t.isSend ? 'Sending' : 'Receiving'} · '
+                    '${(t.sent * 100 / (t.size == 0 ? 1 : t.size)).toStringAsFixed(0)}%',
+                    style: AshText.codeSm(AshColors.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
       ),
     );
   }

@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 
 class Composer extends StatefulWidget {
-  const Composer({super.key, required this.onSend});
+  const Composer({super.key, required this.onSend, this.onAttach});
 
   final void Function(String text) onSend;
+  final VoidCallback? onAttach;
 
   @override
   State<Composer> createState() => _ComposerState();
@@ -51,10 +52,14 @@ class _ComposerState extends State<Composer> {
                     color: AshColors.surfaceContainerHigh,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(
-                    Icons.timer,
-                    size: 20,
-                    color: AshColors.outline,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: widget.onAttach,
+                    child: const Icon(
+                      Icons.attach_file,
+                      size: 20,
+                      color: AshColors.outline,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 8),

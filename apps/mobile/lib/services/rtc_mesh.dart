@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
@@ -49,6 +51,18 @@ Future<List<Map<String, dynamic>>> resolveIceServers(
 class RtcMeshCallbacks {
   void Function(String from, String text)? onMessage;
   void Function(String peerId, bool connected)? onConnectionChange;
+  void Function(String from, String id, String name, int size)? onFileOffer;
+  void Function(
+    String peerId,
+    String id,
+    String name,
+    int size,
+    int sent,
+    bool isSend,
+  )? onFileProgress;
+  void Function(String from, String id, String name, Uint8List bytes)?
+      onFileComplete;
+  void Function(String? peerId)? onFileCancelled;
 }
 
 class _PeerConn {
@@ -59,6 +73,25 @@ class _PeerConn {
   bool connected = false;
   bool remoteSet = false;
   final List<Map<String, dynamic>> queuedCandidates = [];
+
+  // outgoing file transfer
+  String? outId;
+  String? outName;
+  int outSize = 0;
+  int outSeq = 0;
+  Uint8List? outBytes;
+
+  // incoming file transfer
+  String? inId;
+  String? inName;
+  int inSize = 0;
+  int inReceived = 0;
+  final List<Uint8List> inParts = [];
+
+  Map<String, dynamic>? pendingOffer;
+
+  bool get sending => outBytes != null;
+  bool get receiving => inId != null;
 }
 
 /// Full-mesh WebRTC DataChannel layer. SDP/ICE ride the signaling relay; chat
@@ -129,16 +162,255 @@ class RtcMesh {
       }
     });
     channel.messageStream.listen((message) {
-      if (message.isBinary) return;
+      if (message.isBinary) {
+        _handleFileChunk(peerId, message.binary);
+        return;
+      }
       try {
         final data = jsonDecode(message.text) as Map<String, dynamic>;
         if (data['kind'] == 'chat' && data['text'] is String) {
           callbacks.onMessage?.call(peerId, data['text'] as String);
+        } else if (data['kind'] == 'file') {
+          _handleFileControl(peerId, channel, data);
         }
       } catch (_) {
         // ignore malformed frames
       }
     });
+  }
+
+  static String _fileId() {
+    final rand = math.Random();
+    final t = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+    final r = rand.nextInt(0xFFFFFF).toRadixString(36);
+    return '$t-$r';
+  }
+
+  /// Propose a file to one peer; the peer must accept before chunks flow.
+  void sendFile(String peerId, String name, Uint8List bytes) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    if (conn == null ||
+        channel == null ||
+        channel.state != RTCDataChannelState.RTCDataChannelOpen ||
+        conn.sending) {
+      return;
+    }
+    final id = _fileId();
+    conn
+      ..outId = id
+      ..outName = name
+      ..outSize = bytes.length
+      ..outSeq = 0
+      ..outBytes = bytes;
+    channel.send(RTCDataChannelMessage(jsonEncode({
+      'kind': 'file',
+      'action': 'offer',
+      'id': id,
+      'name': name,
+      'size': bytes.length,
+      'mime': '',
+    })));
+  }
+
+  void acceptFile(String peerId, String id) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    final offer = conn?.pendingOffer;
+    if (conn == null || channel == null || offer == null) return;
+    if (offer['id'] != id) return;
+    conn
+      ..inId = offer['id'] as String
+      ..inName = offer['name'] as String
+      ..inSize = (offer['size'] as num).toInt()
+      ..inReceived = 0
+      ..inParts.clear()
+      ..pendingOffer = null;
+    channel.send(RTCDataChannelMessage(jsonEncode({
+      'kind': 'file',
+      'action': 'accept',
+      'id': id,
+    })));
+  }
+
+  void declineFile(String peerId, String id) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    if (conn == null || channel == null) return;
+    if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
+    channel.send(RTCDataChannelMessage(jsonEncode({
+      'kind': 'file',
+      'action': 'decline',
+      'id': id,
+    })));
+  }
+
+  void cancelFile(String peerId, String id) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    if (conn != null) {
+      if (conn.outId == id) {
+        conn
+          ..outId = null
+          ..outName = null
+          ..outSize = 0
+          ..outSeq = 0
+          ..outBytes = null;
+      }
+      if (conn.inId == id) {
+        conn
+          ..inId = null
+          ..inName = null
+          ..inSize = 0
+          ..inReceived = 0
+          ..inParts.clear();
+      }
+      if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
+    }
+    if (channel != null) {
+      channel.send(RTCDataChannelMessage(jsonEncode({
+        'kind': 'file',
+        'action': 'cancel',
+        'id': id,
+      })));
+    }
+  }
+
+  void _handleFileControl(
+    String peerId,
+    RTCDataChannel channel,
+    Map<String, dynamic> msg,
+  ) {
+    final conn = _conns[peerId];
+    if (conn == null) return;
+    final action = msg['action'] as String?;
+    final id = msg['id'] as String?;
+    switch (action) {
+      case 'offer':
+        if (id != null && conn.pendingOffer == null && !conn.receiving) {
+          conn.pendingOffer = msg;
+          callbacks.onFileOffer?.call(
+            peerId,
+            id,
+            msg['name'] as String? ?? 'file',
+            (msg['size'] as num?)?.toInt() ?? 0,
+          );
+        } else if (id != null) {
+          channel.send(RTCDataChannelMessage(jsonEncode({
+            'kind': 'file',
+            'action': 'decline',
+            'id': id,
+          })));
+        }
+      case 'accept':
+        if (conn.sending && conn.outId == id) {
+          unawaited(_pump(peerId, conn, channel));
+        }
+      case 'decline':
+        if (conn.sending && conn.outId == id) {
+          conn
+            ..outId = null
+            ..outName = null
+            ..outSize = 0
+            ..outSeq = 0
+            ..outBytes = null;
+          callbacks.onFileCancelled?.call(peerId);
+        }
+      case 'cancel':
+        if (conn.outId == id) {
+          conn
+            ..outId = null
+            ..outName = null
+            ..outSize = 0
+            ..outSeq = 0
+            ..outBytes = null;
+        }
+        if (conn.inId == id) {
+          conn
+            ..inId = null
+            ..inName = null
+            ..inSize = 0
+            ..inReceived = 0
+            ..inParts.clear();
+        }
+        if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
+        callbacks.onFileCancelled?.call(peerId);
+    }
+  }
+
+  Future<void> _pump(
+    String peerId,
+    _PeerConn conn,
+    RTCDataChannel channel,
+  ) async {
+    final bytes = conn.outBytes;
+    if (bytes == null) return;
+    const chunk = 16384;
+    const backpressure = 1 << 21; // ~2MB queued before we wait
+    while (conn.outSeq < conn.outSize) {
+      if (conn.outBytes == null) break; // cancelled
+      while ((channel.bufferedAmount ?? 0) > backpressure) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        if (channel.state != RTCDataChannelState.RTCDataChannelOpen) break;
+      }
+      if (channel.state != RTCDataChannelState.RTCDataChannelOpen) break;
+      final end = math.min(conn.outSize, conn.outSeq + chunk);
+      final slice = Uint8List.fromList(bytes.sublist(conn.outSeq, end));
+      await channel.send(RTCDataChannelMessage.fromBinary(slice));
+      conn.outSeq = end;
+      callbacks.onFileProgress?.call(
+        peerId,
+        conn.outId!,
+        conn.outName!,
+        conn.outSize,
+        conn.outSeq,
+        true,
+      );
+    }
+    final id = conn.outId;
+    final name = conn.outName;
+    final size = conn.outSize;
+    conn
+      ..outId = null
+      ..outName = null
+      ..outSize = 0
+      ..outSeq = 0
+      ..outBytes = null;
+    if (id != null && name != null) {
+      callbacks.onFileProgress?.call(peerId, id, name, size, size, true);
+    }
+  }
+
+  void _handleFileChunk(String peerId, Uint8List data) {
+    final conn = _conns[peerId];
+    if (conn == null || conn.inId == null) return;
+    conn.inParts.add(data);
+    conn.inReceived += data.length;
+    callbacks.onFileProgress?.call(
+      peerId,
+      conn.inId!,
+      conn.inName!,
+      conn.inSize,
+      conn.inReceived,
+      false,
+    );
+    if (conn.inReceived >= conn.inSize) {
+      final bytes = Uint8List(conn.inSize);
+      var offset = 0;
+      for (final part in conn.inParts) {
+        bytes.setRange(offset, offset + part.length, part);
+        offset += part.length;
+      }
+      final id = conn.inId!;
+      final name = conn.inName!;
+      conn
+        ..inId = null
+        ..inName = null
+        ..inSize = 0
+        ..inReceived = 0
+        ..inParts.clear();
+      callbacks.onFileComplete?.call(peerId, id, name, bytes);
+    }
   }
 
   Future<void> _negotiateOffer(String peerId) async {
