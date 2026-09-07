@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     room_ttl_seconds: int = 3600
-    cleanup_interval_seconds: int = 60
+    cleanup_interval_seconds: int = 180
     max_room_size: int = 5
     max_message_bytes: int = 65536
     max_peer_id_length: int = 64
