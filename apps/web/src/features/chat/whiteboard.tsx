@@ -127,7 +127,7 @@ function Whiteboard({
 
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden bg-surface-container-lowest">
-      <div className="pointer-events-none absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1 rounded-lg bg-surface-container/90 px-2 py-1 shadow-sm backdrop-blur">
+      <div className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-1 rounded-lg bg-surface-container/90 px-2 py-1 shadow-sm backdrop-blur">
         {PALETTE.map((c) => (
           <button
             key={c}
