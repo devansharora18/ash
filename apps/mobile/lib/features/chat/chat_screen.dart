@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../services/rtc_mesh.dart';
 import '../../services/signaling.dart';
 import '../../theme.dart';
 import 'channel_bar.dart';
@@ -54,11 +55,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   final List<String> _peers = [];
+  final Map<String, bool> _connections = {};
 
   SignalClient? _signaling;
   StreamSubscription<SignalEvent>? _sub;
+  RtcMesh? _mesh;
   _ChatStatus _status = _ChatStatus.connecting;
   String? _errorMessage;
+
+  int get _connectedCount => _connections.values.where((v) => v).length;
 
   @override
   void initState() {
@@ -73,6 +78,19 @@ class _ChatScreenState extends State<ChatScreen> {
       roomId: widget.roomId,
       peerId: widget.displayName,
     );
+    _mesh = RtcMesh(
+      widget.displayName,
+      (to, data) {
+        _signaling?.send(to, data);
+      },
+      RtcMeshCallbacks()
+        ..onMessage = (from, text) {
+          _addMessage(self: false, author: from, text: text);
+        }
+        ..onConnectionChange = (peerId, connected) {
+          setState(() => _connections[peerId] = connected);
+        },
+    );
     _sub = _signaling!.events.listen(_onEvent);
   }
 
@@ -85,21 +103,22 @@ class _ChatScreenState extends State<ChatScreen> {
             ..addAll(peers);
           _status = _ChatStatus.connected;
         });
+        for (final peer in peers) {
+          unawaited(_mesh?.addPeer(peer));
+        }
       case PeerJoinedEvent(:final peerId):
         setState(() {
           if (!_peers.contains(peerId)) _peers.add(peerId);
         });
+        unawaited(_mesh?.addPeer(peerId));
       case PeerLeftEvent(:final peerId):
-        setState(() => _peers.remove(peerId));
+        setState(() {
+          _peers.remove(peerId);
+          _connections.remove(peerId);
+        });
+        unawaited(_mesh?.removePeer(peerId));
       case SignalRelayEvent(:final from, :final data):
-        final payload = ChatPayload.tryFrom(data);
-        if (payload != null) {
-          _addMessage(
-            self: false,
-            author: from,
-            text: payload.text,
-          );
-        }
+        unawaited(_mesh?.handleSignal(from, data));
       case SignalClosedEvent(:final code):
         if (_status == _ChatStatus.connected) {
           setState(() {
@@ -165,12 +184,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _sendMessage(String text) {
-    if (_signaling == null) return;
+    if (_mesh == null) return;
     _addMessage(self: true, author: widget.displayName, text: text);
-    final payload = ChatPayload(text: text);
-    for (final peer in _peers) {
-      _signaling!.send(peer, payload.toJson());
-    }
+    _mesh!.broadcast(text);
   }
 
   Future<void> _confirmLeave() async {
@@ -180,6 +196,7 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (_) => const LeaveDialog(),
     );
     if (leave == true && mounted) {
+      unawaited(_mesh?.close());
       _signaling?.close();
       if (Navigator.of(context).canPop()) Navigator.of(context).pop();
     }
@@ -188,6 +205,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _sub?.cancel();
+    unawaited(_mesh?.close());
     _signaling?.close();
     _scrollController.dispose();
     super.dispose();
@@ -210,7 +228,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 ChannelBar(
                   roomId: widget.roomId,
-                  peerCount: _peers.length,
+                  peerCount: _connectedCount,
                   connected: connected,
                   onLeave: _confirmLeave,
                 ),

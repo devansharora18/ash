@@ -59,7 +59,7 @@ class ChatHeader extends StatelessWidget {
                         .copyWith(fontWeight: FontWeight.w600, height: 1.1),
                   ),
                   Text(
-                    connected ? 'signaling::relay' : 'connecting...',
+                    connected ? 'webrtc::direct' : 'connecting...',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AshText.codeSm(

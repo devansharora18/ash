@@ -55,7 +55,7 @@ class ChannelBar extends StatelessWidget {
                             .copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        connected ? 'signaling::relay' : 'connecting...',
+                        connected ? 'webrtc::direct' : 'connecting...',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AshText.codeSm(
@@ -140,8 +140,8 @@ class ChannelBar extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     peerCount > 0
-                        ? 'Messages relayed via signaling'
-                        : 'Connected · waiting for a peer to join',
+                        ? 'WebRTC DataChannel direct'
+                        : 'Connected · waiting for a peer to connect',
                     style: AshText.codeSm(AshColors.onSurfaceVariant),
                   ),
                 ],
