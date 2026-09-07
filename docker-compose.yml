@@ -4,7 +4,7 @@ services:
     environment:
       ASH_HOST: 0.0.0.0
       ASH_PORT: 8000
-      ASH_ALLOWED_ORIGINS: '["http://localhost:5173","http://localhost:4173"]'
+      ASH_ALLOWED_ORIGINS: '["http://localhost:5173","http://localhost:4173","https://hello.devansharora.in","https://ash-hello.vercel.app","https://ash.vercel.app"]'
     ports:
       - "8000:8000"
     restart: unless-stopped

@@ -11,7 +11,14 @@ class Settings(BaseSettings):
     max_room_size: int = 5
     max_message_bytes: int = 65536
     max_peer_id_length: int = 64
-    allowed_origins: list[str] = ["http://localhost:5173", "http://localhost:4173"]
+    allowed_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "https://hello.devansharora.in",
+        "https://ash-hello.vercel.app",
+        "https://ash.vercel.app",
+    ]
+    allowed_origin_regex: str = r"https://.*\.vercel\.app"
     rooms_per_minute: int = 30
 
 
