@@ -13,7 +13,7 @@ function ChatTopbar({ displayName, connected }: ChatTopbarProps) {
           CIPHER:
         </span>
         <span className="font-mono text-code-inline font-medium text-on-surface">
-          X25519 relay
+          AES-256-GCM · ECDH P-256
         </span>
       </div>
       <div className="flex items-center gap-4">

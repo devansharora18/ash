@@ -42,6 +42,14 @@ function nowTime() {
     .join(':')
 }
 
+function fingerprintOf(pubB64: string): string {
+  const source = pubB64.replace(/=/g, '').padEnd(32, '0')
+  return source
+    .slice(0, 32)
+    .replace(/(.{4})/g, '$1 ')
+    .trim()
+}
+
 function downloadBlob(name: string, blob: Blob): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -100,6 +108,7 @@ function ChatPage({
   const [transfers, setTransfers] = useState<TransferItem[]>([])
   const [strokes, setStrokes] = useState<BoardStroke[]>([])
   const [sharingScreen, setSharingScreen] = useState(false)
+  const [identityPub, setIdentityPub] = useState('')
   const [localShareStream, setLocalShareStream] = useState<MediaStream | null>(null)
   const [remoteScreens, setRemoteScreens] = useState<
     { peerId: string; stream: MediaStream }[]
@@ -148,6 +157,7 @@ function ChatPage({
     void (async () => {
       const identity = await loadOrCreateIdentity()
       if (cancelled) return
+      setIdentityPub(identity.pubB64)
       mesh = new RtcMesh(
         displayName,
         (to, data) => connectionRef.current?.send(to, data),
@@ -520,6 +530,7 @@ function ChatPage({
               displayName={displayName}
               peers={peers}
               connections={connections}
+              fingerprint={fingerprintOf(identityPub)}
               onInviteQr={() => setQrOpen(true)}
               onLeaveRoom={() => setIncinerateOpen(true)}
             />

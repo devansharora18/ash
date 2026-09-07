@@ -45,10 +45,12 @@ function QrModal({ open, onClose, roomId }: QrModalProps) {
 
         <div className="space-y-2">
           <span className="font-sans text-caption uppercase tracking-wider text-outline">
-            Fingerprint verification
+            End-to-end encrypted
           </span>
-          <p className="break-all rounded-lg bg-surface-container-low p-2.5 font-mono text-code-inline text-on-surface-variant">
-            SHA256:7F31:B820:99CA:012D:EF44:D91A:C401:AA78
+          <p className="rounded-lg bg-surface-container-low p-2.5 font-sans text-caption text-on-surface-variant">
+            Content is encrypted between devices (AES-256-GCM over ECDH P-256)
+            before it leaves your browser. Keys are trusted on first use —
+            manual fingerprint verification between peers isn't available yet.
           </p>
         </div>
 

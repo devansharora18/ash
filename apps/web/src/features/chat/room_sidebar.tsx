@@ -4,16 +4,15 @@ import { Check, Copy, Link, LogOut, QrCode } from 'lucide-react'
 const telemetry = [
   { label: 'Topology', value: 'WebRTC mesh' },
   { label: 'Transport', value: 'DataChannel' },
-  { label: 'Ratchet', value: '—' },
+  { label: 'Cipher', value: 'AES-256-GCM' },
 ]
-
-const fingerprint = ['—', '—', '—', '—', '—', '—', '—', '—']
 
 interface RoomSidebarProps {
   roomId: string
   displayName: string
   peers: string[]
   connections: Record<string, boolean>
+  fingerprint: string
   onInviteQr: () => void
   onLeaveRoom: () => void
 }
@@ -23,6 +22,7 @@ function RoomSidebar({
   displayName,
   peers,
   connections,
+  fingerprint,
   onInviteQr,
   onLeaveRoom,
 }: RoomSidebarProps) {
@@ -158,10 +158,10 @@ function RoomSidebar({
 
         <div className="space-y-2 rounded-xl bg-surface-container-low p-3">
           <span className="block font-sans text-caption font-medium uppercase tracking-wider text-outline">
-            Key Fingerprint
+            Device Fingerprint
           </span>
           <div className="grid select-all grid-cols-4 gap-1 rounded-lg bg-surface-container-lowest p-2 text-center font-mono text-[11px] text-outline">
-            {fingerprint.map((value) => (
+            {fingerprint.split(' ').map((value) => (
               <span key={value}>{value}</span>
             ))}
           </div>
