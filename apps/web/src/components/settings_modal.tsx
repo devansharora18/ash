@@ -1,21 +1,20 @@
 import { useState } from 'react'
-import { Server, UserRound, X } from 'lucide-react'
+import { Server, ToggleRight, UserRound, X } from 'lucide-react'
+
+import type { Settings } from '../lib/settings'
 
 interface SettingsModalProps {
-  displayName: string
-  backendUrl: string
-  onSave: (displayName: string, backendUrl: string) => void
+  settings: Settings
+  onSave: (settings: Settings) => void
   onClose: () => void
 }
 
-function SettingsModal({
-  displayName,
-  backendUrl,
-  onSave,
-  onClose,
-}: SettingsModalProps) {
-  const [name, setName] = useState(displayName)
-  const [url, setUrl] = useState(backendUrl)
+function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
+  const [name, setName] = useState(settings.displayName)
+  const [url, setUrl] = useState(settings.backendUrl)
+  const [turnUrl, setTurnUrl] = useState(settings.turnUrl)
+  const [turnUsername, setTurnUsername] = useState(settings.turnUsername)
+  const [turnCredential, setTurnCredential] = useState(settings.turnCredential)
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = () => {
@@ -29,7 +28,17 @@ function SettingsModal({
       setError('Backend URL must start with http:// or https://')
       return
     }
-    onSave(trimmedName, trimmedUrl)
+    if (turnUrl.trim() && !/^(turn|turns):\/\//i.test(turnUrl.trim())) {
+      setError('TURN server URL must start with turn:// or turns://')
+      return
+    }
+    onSave({
+      displayName: trimmedName,
+      backendUrl: trimmedUrl,
+      turnUrl: turnUrl.trim(),
+      turnUsername: turnUsername.trim(),
+      turnCredential: turnCredential.trim(),
+    })
     onClose()
   }
 
@@ -40,7 +49,7 @@ function SettingsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-      <div className="w-full max-w-[420px] space-y-5 rounded-xl bg-surface-container-lowest p-6 shadow-2xl">
+      <div className="w-full max-w-[440px] space-y-5 overflow-y-auto rounded-xl bg-surface-container-lowest p-6 shadow-2xl max-h-[92vh]">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <UserRound className="h-5 w-5 text-primary-fixed-dim" />
@@ -95,6 +104,65 @@ function SettingsModal({
                 }}
                 className={`${inputCls} pl-9 font-mono text-code-inline`}
               />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-lg border border-surface-container-high bg-surface-container-low p-3">
+            <div className="flex items-center gap-2 text-on-surface-variant">
+              <ToggleRight className="h-4 w-4" />
+              <span className={labelCls}>TURN server (optional)</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="settings-turn-url" className={labelCls}>
+                URL
+              </label>
+              <input
+                id="settings-turn-url"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="turn:turn.example.com:3478"
+                value={turnUrl}
+                onChange={(event) => {
+                  setTurnUrl(event.target.value)
+                  setError(null)
+                }}
+                className={`${inputCls} font-mono text-code-inline`}
+              />
+            </div>
+            <div className="flex gap-2">
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label htmlFor="settings-turn-user" className={labelCls}>
+                  Username
+                </label>
+                <input
+                  id="settings-turn-user"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={turnUsername}
+                  onChange={(event) => {
+                    setTurnUsername(event.target.value)
+                    setError(null)
+                  }}
+                  className={`${inputCls} font-mono text-code-inline`}
+                />
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <label htmlFor="settings-turn-pass" className={labelCls}>
+                  Password
+                </label>
+                <input
+                  id="settings-turn-pass"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={turnCredential}
+                  onChange={(event) => {
+                    setTurnCredential(event.target.value)
+                    setError(null)
+                  }}
+                  className={`${inputCls} font-mono text-code-inline`}
+                />
+              </div>
             </div>
           </div>
 

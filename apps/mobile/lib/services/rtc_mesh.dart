@@ -3,6 +3,21 @@ import 'dart:convert';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'settings_service.dart';
+
+/// Build the ICE server list for flutter_webrtc: always the STUN fallback,
+/// plus an optional TURN relay from settings.
+List<Map<String, dynamic>> iceServersFor(AppSettings settings) => [
+      {'urls': 'stun:stun.l.google.com:19302'},
+      if (settings.turnUrl.isNotEmpty)
+        {
+          'urls': settings.turnUrl,
+          if (settings.turnUsername.isNotEmpty) 'username': settings.turnUsername,
+          if (settings.turnCredential.isNotEmpty)
+            'credential': settings.turnCredential,
+        },
+    ];
+
 /// Callbacks a chat screen uses to render mesh events. Keep it as a plain
 /// class so tests can wire them without the real transport.
 class RtcMeshCallbacks {
@@ -27,23 +42,22 @@ class _PeerConn {
 /// peers never both send an offer. The wire format matches the web client so
 /// web and mobile peers can interoperate.
 class RtcMesh {
-  RtcMesh(this.selfId, this.sendSignal, this.callbacks);
+  RtcMesh(this.selfId, this.sendSignal, this.callbacks, [this.iceServers]);
 
   final String selfId;
   final void Function(String to, Object data) sendSignal;
   final RtcMeshCallbacks callbacks;
+  final List<Map<String, dynamic>>? iceServers;
 
   final Map<String, _PeerConn> _conns = {};
 
-  static const _config = {
-    'iceServers': [
-      {'urls': 'stun:stun.l.google.com:19302'},
-    ],
-  };
-
   Future<void> addPeer(String peerId) async {
     if (_conns.containsKey(peerId)) return;
-    final pc = await createPeerConnection(_config);
+    final config = {
+      'iceServers':
+          iceServers ?? [{'urls': 'stun:stun.l.google.com:19302'}],
+    };
+    final pc = await createPeerConnection(config);
     final conn = _PeerConn(pc);
     _conns[peerId] = conn;
     _bindIce(peerId, pc);

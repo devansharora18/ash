@@ -18,3 +18,22 @@ services:
     depends_on:
       - signaling
     restart: unless-stopped
+
+  # Optional TURN/media relay for WebRTC across NATs (peers on different
+  # networks). Needs 3478/tcp+udp open on the host, i.e. on a public IP — not
+  # behind the Cloudflare tunnel. Set TURN_REALM/TURN_USER/TURN_PASSWORD in .env.
+  turn:
+    image: coturn/coturn:latest
+    command:
+      - -n
+      - --realm=${TURN_REALM:-localhost}
+      - --user=${TURN_USER:-ash}:${TURN_PASSWORD:-ash}
+      - --listening-port=3478
+      - --min-port=49152
+      - --max-port=65535
+      - --no-tls
+      - --no-dtls
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+    restart: unless-stopped

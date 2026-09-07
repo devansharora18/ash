@@ -1,8 +1,23 @@
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-}
+import type { Settings } from './settings'
 
-type SignalSender = (to: string, data: unknown) => void
+const STUN_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+]
+
+export type SignalSender = (to: string, data: unknown) => void
+
+/** Build the ICE server list: always the STUN fallback, plus optional TURN. */
+export function buildIceServers(settings: Settings): RTCIceServer[] {
+  const servers: RTCIceServer[] = [...STUN_SERVERS]
+  if (settings.turnUrl) {
+    servers.push({
+      urls: settings.turnUrl,
+      username: settings.turnUsername || undefined,
+      credential: settings.turnCredential || undefined,
+    })
+  }
+  return servers
+}
 
 type RtcSignal =
   | { type: 'offer'; description: RTCSessionDescriptionInit }
@@ -34,16 +49,23 @@ export class RtcMesh {
   private selfId: string
   private sendSignal: SignalSender
   private callbacks: MeshCallbacks
+  private iceServers: RTCIceServer[]
 
-  constructor(selfId: string, sendSignal: SignalSender, callbacks: MeshCallbacks) {
+  constructor(
+    selfId: string,
+    sendSignal: SignalSender,
+    callbacks: MeshCallbacks,
+    iceServers: RTCIceServer[] = STUN_SERVERS,
+  ) {
     this.selfId = selfId
     this.sendSignal = sendSignal
     this.callbacks = callbacks
+    this.iceServers = iceServers
   }
 
   addPeer(peerId: string): void {
     if (this.conns.has(peerId)) return
-    const pc = new RTCPeerConnection(RTC_CONFIG)
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers })
     const conn: PeerConn = {
       pc,
       channel: null,

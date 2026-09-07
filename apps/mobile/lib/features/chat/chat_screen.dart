@@ -18,6 +18,7 @@ class ChatScreen extends StatefulWidget {
     required this.backendUrl,
     required this.roomId,
     this.connectClient,
+    this.iceServers = const [],
   });
 
   final String displayName;
@@ -30,6 +31,9 @@ class ChatScreen extends StatefulWidget {
     required String roomId,
     required String peerId,
   })? connectClient;
+
+  /// ICE servers for WebRTC (STUN + optional TURN). Empty keeps STUN default.
+  final List<Map<String, dynamic>> iceServers;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -90,6 +94,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ..onConnectionChange = (peerId, connected) {
           setState(() => _connections[peerId] = connected);
         },
+      widget.iceServers,
     );
     _sub = _signaling!.events.listen(_onEvent);
   }

@@ -5,6 +5,7 @@ import SiteHeader from './components/site_header'
 import SettingsModal from './components/settings_modal'
 import ChatPage from './features/chat/chat_page'
 import HomePage from './features/home/home_page'
+import { buildIceServers } from './lib/rtc'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
 
 function initialRoom(): string | null {
@@ -24,8 +25,7 @@ function App() {
     setPage('chat')
   }
 
-  const handleSaveSettings = (displayName: string, backendUrl: string) => {
-    const next: Settings = { displayName, backendUrl }
+  const handleSaveSettings = (next: Settings) => {
     setSettings(next)
     saveSettings(next)
   }
@@ -42,6 +42,7 @@ function App() {
         displayName={settings.displayName}
         backendUrl={settings.backendUrl}
         roomId={roomId}
+        iceServers={buildIceServers(settings)}
         onLeave={handleLeave}
       />
     )
@@ -61,8 +62,7 @@ function App() {
       <SiteFooter />
       {settingsOpen && (
         <SettingsModal
-          displayName={settings.displayName}
-          backendUrl={settings.backendUrl}
+          settings={settings}
           onSave={handleSaveSettings}
           onClose={() => setSettingsOpen(false)}
         />

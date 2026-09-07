@@ -1,6 +1,9 @@
 export interface Settings {
   displayName: string
   backendUrl: string
+  turnUrl: string
+  turnUsername: string
+  turnCredential: string
 }
 
 const STORAGE_KEY = 'ash.settings'
@@ -14,7 +17,14 @@ export function defaultSettings(): Settings {
   return {
     displayName: `peer_${randomSuffix()}`,
     backendUrl: DEFAULT_BACKEND_URL,
+    turnUrl: '',
+    turnUsername: '',
+    turnCredential: '',
   }
+}
+
+function str(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback
 }
 
 export function loadSettings(): Settings {
@@ -24,14 +34,14 @@ export function loadSettings(): Settings {
     if (!raw) return fallback
     const parsed = JSON.parse(raw) as Partial<Settings>
     return {
-      displayName:
-        typeof parsed.displayName === 'string' && parsed.displayName.trim()
-          ? parsed.displayName.trim()
-          : fallback.displayName,
-      backendUrl:
-        typeof parsed.backendUrl === 'string' && parsed.backendUrl.trim()
-          ? parsed.backendUrl.replace(/\/+$/, '')
-          : fallback.backendUrl,
+      displayName: str(parsed.displayName, fallback.displayName),
+      backendUrl: str(parsed.backendUrl, fallback.backendUrl).replace(
+        /\/+$/,
+        '',
+      ),
+      turnUrl: str(parsed.turnUrl, ''),
+      turnUsername: str(parsed.turnUsername, ''),
+      turnCredential: str(parsed.turnCredential, ''),
     }
   } catch {
     return fallback

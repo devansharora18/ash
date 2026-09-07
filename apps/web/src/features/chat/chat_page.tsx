@@ -37,10 +37,17 @@ interface ChatPageProps {
   displayName: string
   backendUrl: string
   roomId: string
+  iceServers: RTCIceServer[]
   onLeave: () => void
 }
 
-function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
+function ChatPage({
+  displayName,
+  backendUrl,
+  roomId,
+  iceServers,
+  onLeave,
+}: ChatPageProps) {
   const [view, setView] = useState<ChatView>('chat')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [peers, setPeers] = useState<string[]>([])
@@ -74,6 +81,7 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
           setConnections((prev) => ({ ...prev, [peerId]: connected }))
         },
       },
+      iceServers,
     )
     meshRef.current = mesh
 
@@ -134,7 +142,7 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
       mesh.close()
       meshRef.current = null
     }
-  }, [backendUrl, roomId, displayName])
+  }, [backendUrl, roomId, displayName, iceServers])
 
   const connectedCount = Object.values(connections).filter(Boolean).length
 

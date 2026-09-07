@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../services/rtc_mesh.dart';
 import '../../services/settings_service.dart';
 import '../chat/chat_screen.dart';
 import 'brand_header.dart';
@@ -51,6 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
         displayName: widget.settings.displayName,
         backendUrl: widget.settings.backendUrl,
         roomId: roomId,
+        iceServers: iceServersFor(widget.settings),
       ),
     ));
   }

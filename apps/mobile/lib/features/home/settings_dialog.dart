@@ -16,6 +16,9 @@ class SettingsDialog extends StatefulWidget {
 class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _name;
   late final TextEditingController _url;
+  late final TextEditingController _turnUrl;
+  late final TextEditingController _turnUsername;
+  late final TextEditingController _turnCredential;
   String? _error;
 
   @override
@@ -23,18 +26,25 @@ class _SettingsDialogState extends State<SettingsDialog> {
     super.initState();
     _name = TextEditingController(text: widget.settings.displayName);
     _url = TextEditingController(text: widget.settings.backendUrl);
+    _turnUrl = TextEditingController(text: widget.settings.turnUrl);
+    _turnUsername = TextEditingController(text: widget.settings.turnUsername);
+    _turnCredential = TextEditingController(text: widget.settings.turnCredential);
   }
 
   @override
   void dispose() {
     _name.dispose();
     _url.dispose();
+    _turnUrl.dispose();
+    _turnUsername.dispose();
+    _turnCredential.dispose();
     super.dispose();
   }
 
   void _save() {
     final name = _name.text.trim();
     var url = _url.text.trim();
+    final turnUrl = _turnUrl.text.trim();
     if (name.isEmpty) {
       setState(() => _error = 'Display name cannot be empty.');
       return;
@@ -43,8 +53,20 @@ class _SettingsDialogState extends State<SettingsDialog> {
       setState(() => _error = 'Backend URL must start with http:// or https://');
       return;
     }
+    if (turnUrl.isNotEmpty &&
+        !turnUrl.startsWith('turn://') &&
+        !turnUrl.startsWith('turns://')) {
+      setState(() => _error = 'TURN URL must start with turn:// or turns://');
+      return;
+    }
     url = url.replaceAll(RegExp(r'/+$'), '');
-    Navigator.of(context).pop(AppSettings(displayName: name, backendUrl: url));
+    Navigator.of(context).pop(AppSettings(
+      displayName: name,
+      backendUrl: url,
+      turnUrl: turnUrl,
+      turnUsername: _turnUsername.text.trim(),
+      turnCredential: _turnCredential.text.trim(),
+    ));
   }
 
   InputDecoration _decoration(String hint) => InputDecoration(
@@ -71,8 +93,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
       backgroundColor: AshColors.surfaceContainer,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 400),
-        child: Padding(
+        constraints: const BoxConstraints(maxWidth: 400, maxHeight: 560),
+        child: SingleChildScrollView(
+          child: Padding(
           padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -109,6 +132,42 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 style: AshText.codeMd(AshColors.onSurface),
                 cursorColor: AshColors.tint,
                 decoration: _decoration('http://localhost:8000'),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'TURN server (optional)',
+                style: AshText.labelSm(AshColors.outline),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _turnUrl,
+                keyboardType: TextInputType.url,
+                style: AshText.codeMd(AshColors.onSurface),
+                cursorColor: AshColors.tint,
+                decoration: _decoration('turn:turn.example.com:3478'),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _turnUsername,
+                      style: AshText.codeMd(AshColors.onSurface),
+                      cursorColor: AshColors.tint,
+                      decoration: _decoration('username'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _turnCredential,
+                      obscureText: true,
+                      style: AshText.codeMd(AshColors.onSurface),
+                      cursorColor: AshColors.tint,
+                      decoration: _decoration('password'),
+                    ),
+                  ),
+                ],
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
@@ -166,6 +225,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
