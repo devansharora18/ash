@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { Check, Copy, Link, LogOut, QrCode } from 'lucide-react'
 
 const telemetry = [
-  { label: 'Topology', value: 'Star relay' },
-  { label: 'Cipher', value: '—' },
+  { label: 'Topology', value: 'WebRTC mesh' },
+  { label: 'Transport', value: 'DataChannel' },
   { label: 'Ratchet', value: '—' },
 ]
 
@@ -13,6 +13,7 @@ interface RoomSidebarProps {
   roomId: string
   displayName: string
   peers: string[]
+  connections: Record<string, boolean>
   onInviteQr: () => void
   onLeaveRoom: () => void
 }
@@ -21,6 +22,7 @@ function RoomSidebar({
   roomId,
   displayName,
   peers,
+  connections,
   onInviteQr,
   onLeaveRoom,
 }: RoomSidebarProps) {
@@ -33,6 +35,8 @@ function RoomSidebar({
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1400)
   }
+
+  const onlineCount = peers.filter((id) => connections[id]).length
 
   return (
     <aside className="flex w-72 shrink-0 flex-col bg-surface-container-lowest">
@@ -87,7 +91,7 @@ function RoomSidebar({
               Connected Peers
             </span>
             <span className="rounded-full bg-surface-container-high px-2 py-0.5 font-mono text-code-inline text-primary-fixed-dim">
-              {peers.length} online
+              {onlineCount} online
             </span>
           </div>
           <div className="mt-1 space-y-1">
@@ -108,13 +112,17 @@ function RoomSidebar({
                 className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-surface-container-low"
               >
                 <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary-container" />
+                  <span
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                      connections[peerId] ? 'bg-primary-container' : 'bg-outline'
+                    }`}
+                  />
                   <span className="truncate font-sans text-body-sm-medium text-on-surface">
                     {peerId}
                   </span>
                 </div>
                 <span className="font-mono text-code-inline text-outline">
-                  peer
+                  {connections[peerId] ? 'direct' : 'connecting'}
                 </span>
               </div>
             ))}
@@ -132,7 +140,7 @@ function RoomSidebar({
               Transport
             </span>
             <span className="font-mono text-code-inline text-primary-fixed-dim">
-              Signaling relay
+              WebRTC direct
             </span>
           </div>
           <div className="space-y-1.5 pt-1">

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
+import { RtcMesh } from '../../lib/rtc'
 import {
   connectSignaling,
-  type ChatPayload,
   type ServerMessage,
   type SignalingConnection,
 } from '../../lib/signaling'
@@ -44,14 +44,39 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
   const [view, setView] = useState<ChatView>('chat')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [peers, setPeers] = useState<string[]>([])
+  const [connections, setConnections] = useState<Record<string, boolean>>({})
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'connecting' })
   const [qrOpen, setQrOpen] = useState(false)
   const [incinerateOpen, setIncinerateOpen] = useState(false)
 
   const connectionRef = useRef<SignalingConnection | null>(null)
+  const meshRef = useRef<RtcMesh | null>(null)
   const idRef = useRef(1)
 
   useEffect(() => {
+    const mesh = new RtcMesh(
+      displayName,
+      (to, data) => connectionRef.current?.send(to, data),
+      {
+        onMessage: (from, text) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: idRef.current++,
+              author: from,
+              time: nowTime(),
+              text,
+              self: false,
+            },
+          ])
+        },
+        onConnectionChange: (peerId, connected) => {
+          setConnections((prev) => ({ ...prev, [peerId]: connected }))
+        },
+      },
+    )
+    meshRef.current = mesh
+
     const connection = connectSignaling({
       backendUrl,
       roomId,
@@ -61,6 +86,7 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
           case 'welcome':
             setPeers(message.peers)
             setStatus({ kind: 'connected' })
+            for (const peer of message.peers) mesh.addPeer(peer)
             break
           case 'peer-joined':
             setPeers((prev) =>
@@ -68,26 +94,20 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
                 ? prev
                 : [...prev, message.peer_id],
             )
+            mesh.addPeer(message.peer_id)
             break
           case 'peer-left':
             setPeers((prev) => prev.filter((id) => id !== message.peer_id))
+            mesh.removePeer(message.peer_id)
+            setConnections((prev) => {
+              const next = { ...prev }
+              delete next[message.peer_id]
+              return next
+            })
             break
-          case 'signal': {
-            const data = message.data as Partial<ChatPayload> | null
-            if (data && data.kind === 'chat' && typeof data.text === 'string') {
-              setMessages((prev) => [
-                ...prev,
-                {
-                  id: idRef.current++,
-                  author: message.from,
-                  time: nowTime(),
-                  text: data.text as string,
-                  self: false,
-                },
-              ])
-            }
+          case 'signal':
+            void mesh.handleSignal(message.from, message.data)
             break
-          }
           case 'error':
             break
         }
@@ -111,8 +131,12 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
     return () => {
       connection.close()
       connectionRef.current = null
+      mesh.close()
+      meshRef.current = null
     }
   }, [backendUrl, roomId, displayName])
+
+  const connectedCount = Object.values(connections).filter(Boolean).length
 
   const handleSend = (text: string) => {
     setMessages((prev) => [
@@ -125,19 +149,18 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
         self: true,
       },
     ])
-    const payload: ChatPayload = { kind: 'chat', text }
-    for (const peer of peers) {
-      connectionRef.current?.send(peer, payload)
-    }
+    meshRef.current?.broadcast(text)
     setView('chat')
   }
 
   const handleConfirmIncinerate = () => {
     setIncinerateOpen(false)
+    meshRef.current?.close()
     connectionRef.current?.close()
     connectionRef.current = null
     setMessages([])
     setPeers([])
+    setConnections({})
     onLeave()
   }
 
@@ -155,6 +178,7 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
               roomId={roomId}
               displayName={displayName}
               peers={peers}
+              connections={connections}
               onInviteQr={() => setQrOpen(true)}
               onLeaveRoom={() => setIncinerateOpen(true)}
             />
@@ -163,7 +187,7 @@ function ChatPage({ displayName, backendUrl, roomId, onLeave }: ChatPageProps) {
               onViewChange={setView}
               roomId={roomId}
               messages={messages}
-              peersOnline={peers.length}
+              peersOnline={connectedCount}
               statusMessage={
                 status.kind === 'connecting'
                   ? 'Connecting…'

@@ -68,8 +68,8 @@ function MessageFeed({ messages, peersOnline }: MessageFeedProps) {
           <ShieldCheck className="h-4 w-4 text-primary-fixed-dim" />
           <span className="font-mono text-code-inline text-on-surface-variant">
             {peersOnline > 0
-              ? `${peersOnline} peer${peersOnline === 1 ? '' : 's'} connected · messages relayed via signaling`
-              : 'Connected · waiting for a peer to join'}
+              ? `${peersOnline} peer${peersOnline === 1 ? '' : 's'} connected · WebRTC DataChannel`
+              : 'Connected · waiting for a peer to connect'}
           </span>
         </div>
       </div>
