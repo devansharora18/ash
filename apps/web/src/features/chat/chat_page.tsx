@@ -156,6 +156,11 @@ function ChatPage({
           setTransfers((prev) => prev.filter((t) => t.peerId !== from))
           setToast(`File transfer with ${from} cancelled`)
         },
+        onVoiceMessage: (from, blob, durationMs) => {
+          void from
+          void blob
+          void durationMs
+        },
       },
       iceServers,
     )

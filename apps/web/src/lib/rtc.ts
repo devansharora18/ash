@@ -81,8 +81,10 @@ export interface FileProgress {
 interface OutgoingFile {
   id: string
   name: string
-  file: File
+  file: Blob
   seq: number
+  kind: 'file' | 'voice'
+  durationMs: number
 }
 
 interface IncomingFile {
@@ -91,6 +93,8 @@ interface IncomingFile {
   size: number
   parts: ArrayBuffer[]
   received: number
+  kind: 'file' | 'voice'
+  durationMs: number
 }
 
 export interface MeshCallbacks {
@@ -100,6 +104,7 @@ export interface MeshCallbacks {
   onFileProgress: (from: string, progress: FileProgress) => void
   onFileComplete: (from: string, name: string, blob: Blob) => void
   onFileCancelled: (from: string) => void
+  onVoiceMessage: (from: string, blob: Blob, durationMs: number) => void
 }
 
 /**
@@ -195,8 +200,8 @@ export class RtcMesh {
           }
           if (msg.kind === 'chat' && typeof msg.text === 'string') {
             this.callbacks.onMessage(peerId, msg.text)
-          } else if (msg.kind === 'file') {
-            this.handleFileControl(peerId, channel, msg)
+          } else if (msg.kind === 'file' || msg.kind === 'voice') {
+            this.handleTransferControl(peerId, channel, msg)
           }
         } catch {
           // ignore malformed frames
@@ -267,7 +272,7 @@ export class RtcMesh {
       return false
     }
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    conn.outgoing = { id, name: file.name, file, seq: 0 }
+    conn.outgoing = { id, name: file.name, file, seq: 0, kind: 'file', durationMs: 0 }
     channel.send(
       JSON.stringify({
         kind: 'file',
@@ -276,6 +281,35 @@ export class RtcMesh {
         name: file.name,
         size: file.size,
         mime: file.type,
+      }),
+    )
+    return true
+  }
+
+  /** Send a voice message blob to one peer. Accepted automatically, held in RAM only. */
+  sendVoice(peerId: string, blob: Blob, durationMs: number): boolean {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (!conn || !channel || channel.readyState !== 'open' || conn.outgoing) {
+      return false
+    }
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    conn.outgoing = {
+      id,
+      name: 'Voice message',
+      file: blob,
+      seq: 0,
+      kind: 'voice',
+      durationMs,
+    }
+    channel.send(
+      JSON.stringify({
+        kind: 'voice',
+        action: 'offer',
+        id,
+        size: blob.size,
+        mime: blob.type,
+        durationMs,
       }),
     )
     return true
@@ -292,6 +326,8 @@ export class RtcMesh {
         size: conn.pendingOffer.size,
         parts: [],
         received: 0,
+        kind: 'file',
+        durationMs: 0,
       }
       conn.pendingOffer = null
     }
@@ -319,16 +355,39 @@ export class RtcMesh {
     }
   }
 
-  private handleFileControl(
+  private handleTransferControl(
     peerId: string,
     channel: RTCDataChannel,
-    msg: { action?: string; id?: string; name?: string; size?: number; mime?: string },
+    msg: {
+      kind?: string
+      action?: string
+      id?: string
+      name?: string
+      size?: number
+      mime?: string
+      durationMs?: number
+    },
   ): void {
     const conn = this.conns.get(peerId)
     if (!conn) return
     switch (msg.action) {
       case 'offer':
-        if (typeof msg.id === 'string' && !conn.pendingOffer && !conn.incoming) {
+        if (msg.kind === 'voice' && typeof msg.id === 'string') {
+          conn.incoming = {
+            id: msg.id,
+            name: 'Voice message',
+            size: msg.size ?? 0,
+            parts: [],
+            received: 0,
+            kind: 'voice',
+            durationMs: msg.durationMs ?? 0,
+          }
+          channel.send(JSON.stringify({ kind: 'voice', action: 'accept', id: msg.id }))
+        } else if (
+          typeof msg.id === 'string' &&
+          !conn.pendingOffer &&
+          !conn.incoming
+        ) {
           conn.pendingOffer = {
             id: msg.id,
             name: msg.name ?? 'file',
@@ -378,27 +437,31 @@ export class RtcMesh {
       const chunk = await out.file.slice(out.seq, end).arrayBuffer()
       channel.send(chunk)
       out.seq = end
+      if (out.kind === 'file') {
+        this.emitProgress(
+          peerId,
+          conn,
+          out.id,
+          out.name,
+          out.file.size,
+          out.seq,
+          'send',
+        )
+      }
+    }
+    conn.outgoing = null
+    if (out.kind === 'file') {
       this.emitProgress(
         peerId,
         conn,
         out.id,
         out.name,
         out.file.size,
-        out.seq,
+        out.file.size,
         'send',
+        true,
       )
     }
-    conn.outgoing = null
-    this.emitProgress(
-      peerId,
-      conn,
-      out.id,
-      out.name,
-      out.file.size,
-      out.file.size,
-      'send',
-      true,
-    )
   }
 
   private emitProgress(
@@ -438,23 +501,32 @@ export class RtcMesh {
           })()
     inc.parts.push(chunk)
     inc.received += chunk.byteLength
-    this.emitProgress(
-      peerId,
-      conn,
-      inc.id,
-      inc.name,
-      inc.size,
-      inc.received,
-      'receive',
-    )
+    if (inc.kind === 'file') {
+      this.emitProgress(
+        peerId,
+        conn,
+        inc.id,
+        inc.name,
+        inc.size,
+        inc.received,
+        'receive',
+      )
+    }
     if (inc.received >= inc.size) {
       const name = inc.name
       const size = inc.size
       const id = inc.id
       const parts = inc.parts
+      const kind = inc.kind
+      const durationMs = inc.durationMs
       conn.incoming = null
-      this.callbacks.onFileProgress(peerId, { id, name, size, sent: size, direction: 'receive' })
-      this.callbacks.onFileComplete(peerId, name, new Blob(parts))
+      const blob = new Blob(parts)
+      if (kind === 'voice') {
+        this.callbacks.onVoiceMessage(peerId, blob, durationMs)
+      } else {
+        this.callbacks.onFileProgress(peerId, { id, name, size, sent: size, direction: 'receive' })
+        this.callbacks.onFileComplete(peerId, name, blob)
+      }
     }
   }
 
