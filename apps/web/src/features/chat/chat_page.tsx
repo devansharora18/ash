@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, X } from 'lucide-react'
 
+import { loadOrCreateIdentity } from '../../lib/crypto'
 import {
   RtcMesh,
   type BoardStroke,
@@ -141,10 +142,16 @@ function ChatPage({
   }
 
   useEffect(() => {
-    const mesh = new RtcMesh(
-      displayName,
-      (to, data) => connectionRef.current?.send(to, data),
-      {
+    let cancelled = false
+    let mesh: RtcMesh | null = null
+    let connection: SignalingConnection | null = null
+    void (async () => {
+      const identity = await loadOrCreateIdentity()
+      if (cancelled) return
+      mesh = new RtcMesh(
+        displayName,
+        (to, data) => connectionRef.current?.send(to, data),
+        {
         onMessage: (from, text) => {
           setMessages((prev) => [
             ...prev,
@@ -253,65 +260,73 @@ function ChatPage({
           setRemoteScreens((prev) => prev.filter((s) => s.peerId !== peerId))
         },
       },
-      iceServers,
-    )
-    meshRef.current = mesh
+        identity,
+        iceServers,
+      )
+      if (cancelled) {
+        mesh.close()
+        return
+      }
+      meshRef.current = mesh
 
-    const connection = connectSignaling({
-      backendUrl,
-      roomId,
-      peerId: displayName,
-      onMessage: (message: ServerMessage) => {
-        switch (message.type) {
-          case 'welcome':
-            setPeers(message.peers)
-            setStatus({ kind: 'connected' })
-            for (const peer of message.peers) mesh.addPeer(peer)
-            break
-          case 'peer-joined':
-            setPeers((prev) =>
-              prev.includes(message.peer_id)
-                ? prev
-                : [...prev, message.peer_id],
-            )
-            mesh.addPeer(message.peer_id)
-            break
-          case 'peer-left':
-            setPeers((prev) => prev.filter((id) => id !== message.peer_id))
-            mesh.removePeer(message.peer_id)
-            setConnections((prev) => {
-              const next = { ...prev }
-              delete next[message.peer_id]
-              return next
-            })
-            break
-          case 'signal':
-            void mesh.handleSignal(message.from, message.data)
-            break
-          case 'error':
-            break
-        }
-      },
-      onClose: (code, reason) => {
-        setStatus((prev) => {
-          if (prev.kind === 'connected') {
-            return { kind: 'error', message: 'Disconnected from the room.' }
+      const conn = connectSignaling({
+        backendUrl,
+        roomId,
+        peerId: displayName,
+        onMessage: (message: ServerMessage) => {
+          switch (message.type) {
+            case 'welcome':
+              setPeers(message.peers)
+              setStatus({ kind: 'connected' })
+              for (const peer of message.peers) mesh?.addPeer(peer)
+              break
+            case 'peer-joined':
+              setPeers((prev) =>
+                prev.includes(message.peer_id)
+                  ? prev
+                  : [...prev, message.peer_id],
+              )
+              mesh?.addPeer(message.peer_id)
+              break
+            case 'peer-left':
+              setPeers((prev) => prev.filter((id) => id !== message.peer_id))
+              mesh?.removePeer(message.peer_id)
+              setConnections((prev) => {
+                const next = { ...prev }
+                delete next[message.peer_id]
+                return next
+              })
+              break
+            case 'signal':
+              if (mesh) void mesh.handleSignal(message.from, message.data)
+              break
+            case 'error':
+              break
           }
-          return {
-            kind: 'error',
-            message:
-              CLOSE_REASONS[code] ??
-              (reason || 'Could not connect to the backend.'),
-          }
-        })
-      },
-    })
-    connectionRef.current = connection
+        },
+        onClose: (code, reason) => {
+          setStatus((prev) => {
+            if (prev.kind === 'connected') {
+              return { kind: 'error', message: 'Disconnected from the room.' }
+            }
+            return {
+              kind: 'error',
+              message:
+                CLOSE_REASONS[code] ??
+                (reason || 'Could not connect to the backend.'),
+            }
+          })
+        },
+      })
+      connection = conn
+      connectionRef.current = conn
+    })()
 
     return () => {
-      connection.close()
+      cancelled = true
+      connection?.close()
       connectionRef.current = null
-      mesh.close()
+      mesh?.close()
       meshRef.current = null
     }
   }, [backendUrl, roomId, displayName, iceServers])
@@ -348,7 +363,7 @@ function ChatPage({
         self: true,
       },
     ])
-    meshRef.current?.broadcast(text)
+    void meshRef.current?.broadcast(text)
     setView('chat')
   }
 

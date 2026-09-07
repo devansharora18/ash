@@ -1,3 +1,4 @@
+import { seal, unseal, type Envelope, type Identity } from './crypto'
 import type { Settings } from './settings'
 
 const STUN_SERVERS: RTCIceServer[] = [
@@ -135,21 +136,25 @@ export interface MeshCallbacks {
  */
 export class RtcMesh {
   private conns = new Map<string, PeerConn>()
+  private peerPub = new Map<string, string>()
   private selfId: string
   private sendSignal: SignalSender
   private callbacks: MeshCallbacks
   private iceServers: RTCIceServer[]
   private shareStream: MediaStream | null = null
+  private identity: Identity
 
   constructor(
     selfId: string,
     sendSignal: SignalSender,
     callbacks: MeshCallbacks,
+    identity: Identity,
     iceServers: RTCIceServer[] = STUN_SERVERS,
   ) {
     this.selfId = selfId
     this.sendSignal = sendSignal
     this.callbacks = callbacks
+    this.identity = identity
     this.iceServers = iceServers
   }
 
@@ -215,7 +220,12 @@ export class RtcMesh {
   private attachChannel(peerId: string, channel: RTCDataChannel): void {
     const conn = this.conns.get(peerId)
     if (conn) conn.channel = channel
-    channel.onopen = () => this.callbacks.onConnectionChange(peerId, true)
+    channel.onopen = () => {
+      this.callbacks.onConnectionChange(peerId, true)
+      channel.send(
+        JSON.stringify({ kind: 'e2ee', action: 'key', pub: this.identity.pubB64 }),
+      )
+    }
     channel.onclose = () => this.callbacks.onConnectionChange(peerId, false)
     channel.onmessage = (event) => {
       const data = event.data
@@ -225,8 +235,14 @@ export class RtcMesh {
             kind?: string
             text?: string
             action?: string
+            pub?: string
+            env?: Envelope
           }
-          if (msg.kind === 'chat' && typeof msg.text === 'string') {
+          if (msg.kind === 'e2ee' && msg.action === 'key' && typeof msg.pub === 'string') {
+            this.peerPub.set(peerId, msg.pub)
+          } else if (msg.kind === 'enc' && msg.env) {
+            void this.handleEncrypted(peerId, msg.env)
+          } else if (msg.kind === 'chat' && typeof msg.text === 'string') {
             this.callbacks.onMessage(peerId, msg.text)
           } else if (msg.kind === 'file' || msg.kind === 'voice') {
             this.handleTransferControl(peerId, channel, msg)
@@ -239,6 +255,24 @@ export class RtcMesh {
       } else {
         void this.handleFileChunk(peerId, data)
       }
+    }
+  }
+
+  private async handleEncrypted(
+    peerId: string,
+    env: Envelope,
+  ): Promise<void> {
+    try {
+      const plain = await unseal(this.identity, env)
+      if (!plain) return
+      const inner = JSON.parse(
+        new TextDecoder().decode(plain),
+      ) as { kind?: string; text?: string }
+      if (inner.kind === 'chat' && typeof inner.text === 'string') {
+        this.callbacks.onMessage(peerId, inner.text)
+      }
+    } catch {
+      // ignore undecryptable payloads
     }
   }
 
@@ -560,11 +594,17 @@ export class RtcMesh {
     }
   }
 
-  broadcast(text: string): void {
-    const payload = JSON.stringify({ kind: 'chat', text })
-    for (const conn of this.conns.values()) {
-      if (conn.channel && conn.channel.readyState === 'open') {
-        conn.channel.send(payload)
+  /** Encrypt and send a chat message to every connected peer whose key we know. */
+  async broadcast(text: string): Promise<void> {
+    const inner = new TextEncoder().encode(JSON.stringify({ kind: 'chat', text }))
+    for (const [peerId, conn] of this.conns) {
+      const pub = this.peerPub.get(peerId)
+      if (!pub || !conn.channel || conn.channel.readyState !== 'open') continue
+      try {
+        const env = await seal(this.identity, new Uint8Array(inner), [pub])
+        conn.channel.send(JSON.stringify({ kind: 'enc', env }))
+      } catch {
+        // skip peer on encryption error
       }
     }
   }
