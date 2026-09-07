@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
 import GithubIcon from './github_icon'
@@ -11,6 +11,8 @@ const features = [
 ]
 
 function Hero() {
+  const reduced = useReducedMotion()
+
   return (
     <section
       id="top"
@@ -28,7 +30,7 @@ function Hero() {
         >
           <motion.span
             className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
-            animate={{ opacity: [0.5, 1, 0.5] }}
+            animate={reduced ? { opacity: 1 } : { opacity: [0.5, 1, 0.5] }}
             transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
           />
           <span className="font-mono text-code-inline uppercase tracking-widest text-primary">

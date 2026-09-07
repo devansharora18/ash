@@ -1,3 +1,5 @@
+import { MotionConfig } from 'framer-motion'
+
 import Footer from './components/footer'
 import Grain from './components/grain'
 import Hero from './components/hero'
@@ -9,18 +11,20 @@ import TitleBand from './components/title_band'
 
 function App() {
   return (
-    <div className="relative flex min-h-screen flex-col bg-background font-sans text-on-surface">
-      <MeshBackground />
-      <Nav />
-      <main className="relative z-10">
-        <Hero />
-        <TitleBand />
-        <Sections />
-        <SectionCta />
-      </main>
-      <Footer />
-      <Grain />
-    </div>
+    <MotionConfig reducedMotion="user">
+      <div className="relative flex min-h-screen flex-col bg-background font-sans text-on-surface">
+        <MeshBackground />
+        <Nav />
+        <main className="relative z-10">
+          <Hero />
+          <TitleBand />
+          <Sections />
+          <SectionCta />
+        </main>
+        <Footer />
+        <Grain />
+      </div>
+    </MotionConfig>
   )
 }
 

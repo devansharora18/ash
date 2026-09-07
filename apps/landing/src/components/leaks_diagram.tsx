@@ -1,10 +1,12 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Database, User } from 'lucide-react'
 
 const MESSAGE_COUNT = 8
 const STREAMS = 3
 
 function LeaksDiagram() {
+  const reduced = useReducedMotion()
+
   return (
     <div className="overflow-hidden rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 backdrop-blur-sm">
       <div className="flex items-center justify-between border-b border-surface-container-high px-5 py-3">
@@ -46,7 +48,11 @@ function LeaksDiagram() {
               <motion.span
                 key={stream}
                 className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-on-surface-variant shadow-[0_0_8px] shadow-on-surface-variant/60"
-                animate={{ left: ['-2%', '102%'] }}
+                animate={
+                  reduced
+                    ? { left: ['90%', '102%'], opacity: 1 }
+                    : { left: ['-2%', '102%'] }
+                }
                 transition={{
                   duration: 2.4,
                   repeat: Infinity,

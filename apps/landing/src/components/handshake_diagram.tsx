@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Monitor, Server } from 'lucide-react'
 
 interface HandshakeDiagramProps {
@@ -22,6 +22,7 @@ function PeerNode({ label, dim }: { label: string; dim: boolean }) {
 }
 
 function HandshakeDiagram({ active }: HandshakeDiagramProps) {
+  const reduced = useReducedMotion()
   const signaling = active >= 1
   const direct = active >= 2
   const gone = active >= 3
@@ -99,12 +100,12 @@ function HandshakeDiagram({ active }: HandshakeDiagramProps) {
             <motion.div
               className="absolute -left-[3px] h-[7px] w-[7px] rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
               animate={
-                direct && !gone
+                direct && !gone && !reduced
                   ? { top: ['0%', '100%', '0%'] }
                   : { top: '50%', opacity: gone ? 0 : 1 }
               }
               transition={
-                direct && !gone
+                direct && !gone && !reduced
                   ? { duration: 3, repeat: Infinity, ease: 'easeInOut' }
                   : { duration: 0.3 }
               }
@@ -123,12 +124,12 @@ function HandshakeDiagram({ active }: HandshakeDiagramProps) {
             <motion.div
               className="absolute -top-[3px] h-[7px] w-[7px] rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
               animate={
-                direct && !gone
+                direct && !gone && !reduced
                   ? { left: ['0%', '100%', '0%'] }
                   : { left: '50%', opacity: gone ? 0 : 1 }
               }
               transition={
-                direct && !gone
+                direct && !gone && !reduced
                   ? { duration: 3, repeat: Infinity, ease: 'easeInOut' }
                   : { duration: 0.3 }
               }
