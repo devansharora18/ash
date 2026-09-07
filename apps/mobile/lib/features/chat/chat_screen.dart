@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -49,12 +50,18 @@ class _ChatMessage {
     required this.author,
     required this.time,
     required this.text,
+    this.voiceBytes,
+    this.voiceDurationSec,
   });
 
   final bool self;
   final String author;
   final String time;
   final String text;
+  final Uint8List? voiceBytes;
+  final int? voiceDurationSec;
+
+  bool get isVoice => voiceBytes != null;
 }
 
 enum _ChatStatus { connecting, connected, error }
@@ -93,6 +100,9 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Map<String, dynamic>? _incomingFile;
   final Map<String, _TransferItem> _transfers = {};
+
+  final AudioPlayer _player = AudioPlayer();
+  String? _playingKey;
 
   int get _connectedCount => _connections.values.where((v) => v).length;
 
@@ -156,6 +166,9 @@ class _ChatScreenState extends State<ChatScreen> {
             _transfers.removeWhere((_, t) => t.peerId == peerId);
             if (_incomingFile?['from'] == peerId) _incomingFile = null;
           });
+        }
+        ..onVoice = (from, name, bytes, durationSec) {
+          _addVoiceMessage(self: false, author: from, bytes: bytes, durationSec: durationSec);
         },
       widget.iceServers,
     );
@@ -337,6 +350,62 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _addVoiceMessage({
+    required bool self,
+    required String author,
+    required Uint8List bytes,
+    required int durationSec,
+  }) {
+    setState(() {
+      _messages.add(_ChatMessage(
+        self: self,
+        author: author,
+        time: _formatTime(DateTime.now()),
+        text: '',
+        voiceBytes: bytes,
+        voiceDurationSec: durationSec,
+      ));
+    });
+    _scrollToBottom();
+  }
+
+  void _handleVoiceRecorded(Uint8List bytes, int durationSec) {
+    _addVoiceMessage(
+      self: true,
+      author: widget.displayName,
+      bytes: bytes,
+      durationSec: durationSec,
+    );
+    final connected = _peers
+        .where((p) => _connections[p] == true)
+        .toList(growable: false);
+    for (final peer in connected) {
+      _mesh?.sendVoice(peer, bytes, durationSec);
+    }
+  }
+
+  Future<void> _playVoice(_ChatMessage message, String key) async {
+    final bytes = message.voiceBytes;
+    if (bytes == null) return;
+    try {
+      if (_playingKey == key) {
+        await _player.stop();
+        setState(() => _playingKey = null);
+        return;
+      }
+      await _player.stop();
+      await _player.setSourceBytes(bytes, mimeType: 'audio/m4a');
+      await _player.resume();
+      _playingKey = key;
+      _player.onPlayerComplete.first.then((_) {
+        if (mounted) setState(() => _playingKey = null);
+      });
+      setState(() {});
+    } catch (_) {
+      // ignore playback errors
+    }
+  }
+
   Future<void> _confirmLeave() async {
     final leave = await showDialog<bool>(
       context: context,
@@ -356,6 +425,7 @@ class _ChatScreenState extends State<ChatScreen> {
     unawaited(_mesh?.close());
     _signaling?.close();
     _scrollController.dispose();
+    _player.dispose();
     super.dispose();
   }
 
@@ -425,21 +495,35 @@ class _ChatScreenState extends State<ChatScreen> {
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
                     children: [
                       for (var i = 0; i < _messages.length; i++) ...[
-                        _messages[i].self
-                            ? SelfMessageBubble(
-                                time: _messages[i].time,
-                                text: _messages[i].text,
-                                delivered: true,
-                              )
-                            : PeerBubble(
-                                initial: _messages[i].author.isEmpty
-                                    ? '?'
-                                    : _messages[i].author[0].toUpperCase(),
-                                initialColor: AshColors.tertiary,
-                                time: _messages[i].time,
-                                text: _messages[i].text,
-                                peerLabel: _messages[i].author,
-                              ),
+                        _VoiceTile(
+                          key: ObjectKey(_messages[i]),
+                          message: _messages[i],
+                          self: _messages[i].self,
+                          isPlaying:
+                              _playingKey == '${_messages[i].author}/${_messages[i].time}',
+                          onPlay: () => _playVoice(
+                            _messages[i],
+                            '${_messages[i].author}/${_messages[i].time}',
+                          ),
+                        ),
+                        if (_messages[i].self &&
+                            !_messages[i].isVoice)
+                          SelfMessageBubble(
+                            time: _messages[i].time,
+                            text: _messages[i].text,
+                            delivered: true,
+                          )
+                        else if (!_messages[i].self &&
+                            !_messages[i].isVoice)
+                          PeerBubble(
+                            initial: _messages[i].author.isEmpty
+                                ? '?'
+                                : _messages[i].author[0].toUpperCase(),
+                            initialColor: AshColors.tertiary,
+                            time: _messages[i].time,
+                            text: _messages[i].text,
+                            peerLabel: _messages[i].author,
+                          ),
                         if (i != _messages.length - 1)
                           const SizedBox(height: 16),
                       ],
@@ -450,7 +534,11 @@ class _ChatScreenState extends State<ChatScreen> {
                     ],
                   ),
                 ),
-                Composer(onSend: _sendMessage, onAttach: _pickFile),
+                Composer(
+                  onSend: _sendMessage,
+                  onAttach: _pickFile,
+                  onVoice: _handleVoiceRecorded,
+                ),
               ],
             ),
           ),
@@ -561,6 +649,83 @@ class _TransfersPanel extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _VoiceTile extends StatelessWidget {
+  const _VoiceTile({
+    super.key,
+    required this.message,
+    required this.self,
+    required this.isPlaying,
+    required this.onPlay,
+  });
+
+  final _ChatMessage message;
+  final bool self;
+  final bool isPlaying;
+  final VoidCallback onPlay;
+
+  String get _duration {
+    final sec = message.voiceDurationSec ?? 0;
+    final m = (sec ~/ 60).toString();
+    final s = (sec % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!message.isVoice) return const SizedBox.shrink();
+    final bubble = Container(
+      constraints: const BoxConstraints(maxWidth: 240),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: self
+            ? AshColors.surfaceContainerHigh
+            : AshColors.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Material(
+            color: AshColors.tint,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: onPlay,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: Icon(
+                  isPlaying ? Icons.pause : Icons.play_arrow,
+                  size: 18,
+                  color: AshColors.onPrimaryFixed,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_duration, style: AshText.codeMd(AshColors.onSurface)),
+              Text(
+                'RAM-only · not savable',
+                style: AshText.codeSm(AshColors.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+    final meta = Text(
+      '${message.self ? 'You' : message.author} · ${message.time}',
+      style: AshText.codeSm(AshColors.outline),
+    );
+    return Column(
+      crossAxisAlignment: self ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      children: [meta, const SizedBox(height: 4), bubble],
     );
   }
 }

@@ -63,6 +63,8 @@ class RtcMeshCallbacks {
   void Function(String from, String id, String name, Uint8List bytes)?
       onFileComplete;
   void Function(String? peerId)? onFileCancelled;
+  void Function(String from, String name, Uint8List bytes, int durationSec)?
+      onVoice;
 }
 
 class _PeerConn {
@@ -81,12 +83,14 @@ class _PeerConn {
   int outSeq = 0;
   Uint8List? outBytes;
 
-  // incoming file transfer
+  // incoming file/voice transfer
   String? inId;
   String? inName;
   int inSize = 0;
   int inReceived = 0;
   final List<Uint8List> inParts = [];
+  String? inKind;
+  int inDurationMs = 0;
 
   Map<String, dynamic>? pendingOffer;
 
@@ -170,7 +174,7 @@ class RtcMesh {
         final data = jsonDecode(message.text) as Map<String, dynamic>;
         if (data['kind'] == 'chat' && data['text'] is String) {
           callbacks.onMessage?.call(peerId, data['text'] as String);
-        } else if (data['kind'] == 'file') {
+        } else if (data['kind'] == 'file' || data['kind'] == 'voice') {
           _handleFileControl(peerId, channel, data);
         }
       } catch (_) {
@@ -210,6 +214,34 @@ class RtcMesh {
       'name': name,
       'size': bytes.length,
       'mime': '',
+    })));
+  }
+
+  /// Send a voice recording blob to one peer (auto-accepted on receive).
+  void sendVoice(String peerId, Uint8List bytes, int durationSec) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    if (conn == null ||
+        channel == null ||
+        channel.state != RTCDataChannelState.RTCDataChannelOpen ||
+        conn.sending) {
+      return;
+    }
+    final id = _fileId();
+    conn
+      ..outId = id
+      ..outName = 'Voice message'
+      ..outSize = bytes.length
+      ..outSeq = 0
+      ..outBytes = bytes;
+    channel.send(RTCDataChannelMessage(jsonEncode({
+      'kind': 'voice',
+      'action': 'offer',
+      'id': id,
+      'name': 'Voice message',
+      'size': bytes.length,
+      'mime': 'audio/m4a',
+      'durationMs': durationSec * 1000,
     })));
   }
 
@@ -287,7 +319,23 @@ class RtcMesh {
     final id = msg['id'] as String?;
     switch (action) {
       case 'offer':
-        if (id != null && conn.pendingOffer == null && !conn.receiving) {
+        if (msg['kind'] == 'voice') {
+          if (id != null && !conn.receiving && !conn.sending) {
+            conn
+              ..inKind = 'voice'
+              ..inDurationMs = (msg['durationMs'] as num?)?.toInt() ?? 0
+              ..inId = id
+              ..inName = 'Voice message'
+              ..inSize = (msg['size'] as num?)?.toInt() ?? 0
+              ..inReceived = 0
+              ..inParts.clear();
+            channel.send(RTCDataChannelMessage(jsonEncode({
+              'kind': 'voice',
+              'action': 'accept',
+              'id': id,
+            })));
+          }
+        } else if (id != null && conn.pendingOffer == null && !conn.receiving) {
           conn.pendingOffer = msg;
           callbacks.onFileOffer?.call(
             peerId,
@@ -331,6 +379,8 @@ class RtcMesh {
             ..inName = null
             ..inSize = 0
             ..inReceived = 0
+            ..inKind = null
+            ..inDurationMs = 0
             ..inParts.clear();
         }
         if (conn.pendingOffer?['id'] == id) conn.pendingOffer = null;
@@ -403,13 +453,21 @@ class RtcMesh {
       }
       final id = conn.inId!;
       final name = conn.inName!;
+      final kind = conn.inKind;
+      final durationSec = (conn.inDurationMs / 1000).round();
       conn
         ..inId = null
         ..inName = null
         ..inSize = 0
         ..inReceived = 0
+        ..inKind = null
+        ..inDurationMs = 0
         ..inParts.clear();
-      callbacks.onFileComplete?.call(peerId, id, name, bytes);
+      if (kind == 'voice') {
+        callbacks.onVoice?.call(peerId, 'Voice message', bytes, durationSec);
+      } else {
+        callbacks.onFileComplete?.call(peerId, id, name, bytes);
+      }
     }
   }
 
