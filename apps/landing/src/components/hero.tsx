@@ -24,7 +24,7 @@ function Hero() {
       >
         <motion.div
           variants={staggerItem}
-          className="flex items-center gap-2 rounded-full border border-surface-container-high bg-surface-container-low px-3 py-1"
+          className="flex items-center gap-2 rounded-full border border-surface-container-high bg-surface-container-low/70 px-3 py-1 backdrop-blur-sm"
         >
           <motion.span
             className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
@@ -38,16 +38,18 @@ function Hero() {
 
         <motion.h1
           variants={staggerItem}
-          className="max-w-4xl font-sans text-display-md font-semibold tracking-tight text-on-surface md:text-display-lg"
+          className="max-w-4xl font-sans text-display-md font-bold tracking-tight text-on-surface md:text-display-lg"
         >
           Chat that leaves
           <br />
-          <span className="text-primary-container">no trace.</span>
+          <span className="text-primary-container">
+            no trace.
+          </span>
         </motion.h1>
 
         <motion.p
           variants={staggerItem}
-          className="max-w-2xl font-sans text-body-lg leading-relaxed text-on-surface-variant"
+          className="max-w-2xl font-sans text-body-base leading-relaxed text-on-surface-variant"
         >
           Ash is a room that connects two browsers directly — the server only
           introduces you, then steps out of the way. Messages travel
@@ -95,7 +97,7 @@ function Hero() {
 
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary-container/40 to-transparent"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-primary-container/20"
       />
     </section>
   )
