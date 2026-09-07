@@ -15,6 +15,7 @@ import 'chat_header.dart';
 import 'composer.dart';
 import 'leave_dialog.dart';
 import 'message_bubble.dart';
+import 'whiteboard.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({
@@ -104,6 +105,17 @@ class _ChatScreenState extends State<ChatScreen> {
   final AudioPlayer _player = AudioPlayer();
   String? _playingKey;
 
+  final List<BoardStroke> _strokes = [];
+  List<BoardStroke> get _strokesRef => _strokes;
+  String? _activeStrokeId;
+  bool _boardView = false;
+
+  String _newStrokeId() {
+    final rand = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+    final r = DateTime.now().microsecond.toRadixString(36);
+    return '$rand-$r';
+  }
+
   int get _connectedCount => _connections.values.where((v) => v).length;
 
   @override
@@ -130,6 +142,44 @@ class _ChatScreenState extends State<ChatScreen> {
         }
         ..onConnectionChange = (peerId, connected) {
           setState(() => _connections[peerId] = connected);
+          if (connected && _strokes.isNotEmpty) {
+            _mesh?.sendBoardSync(peerId, _strokesRef);
+          }
+        }
+        ..onBoard = (from, event) {
+          switch (event['type']) {
+            case 'start':
+              final id = event['id'] as String;
+              if (_strokes.any((s) => s['id'] == id)) return;
+              setState(() => _strokes.add({
+                    'id': id,
+                    'color': event['color'] as String? ?? '#ffffff',
+                    'width': (event['width'] as num?)?.toInt() ?? 5,
+                    'points': [
+                      {'x': event['x'], 'y': event['y']},
+                    ],
+                  }));
+            case 'point':
+              final id = event['id'] as String?;
+              final s = _strokes.where((st) => st['id'] == id).firstOrNull;
+              if (s != null) {
+                setState(() => (s['points'] as List).add({'x': event['x'], 'y': event['y']}));
+              }
+            case 'end':
+            case 'sync':
+              final incoming = (event['strokes'] as List?) ?? const [];
+              setState(() {
+                for (final stroke in incoming) {
+                  final m = (stroke as Map).cast<String, dynamic>();
+                  final id = m['id'];
+                  if (id is String && !_strokes.any((s) => s['id'] == id)) {
+                    _strokes.add(m);
+                  }
+                }
+              });
+            case 'clear':
+              setState(_strokes.clear);
+          }
         }
         ..onFileOffer = (from, id, name, size) {
           setState(() => _incomingFile = {
@@ -384,6 +434,37 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _strokeStart(double x, double y, String color, int width) {
+    final id = _newStrokeId();
+    _activeStrokeId = id;
+    setState(() {
+      _strokes.add({'id': id, 'color': color, 'width': width, 'points': [{'x': x, 'y': y}]});
+    });
+    _mesh?.broadcastBoard({'type': 'start', 'id': id, 'color': color, 'width': width, 'x': x, 'y': y});
+  }
+
+  void _strokePoint(double x, double y) {
+    final id = _activeStrokeId;
+    if (id == null) return;
+    final s = _strokes.where((st) => st['id'] == id).firstOrNull;
+    if (s != null) {
+      setState(() => (s['points'] as List).add({'x': x, 'y': y}));
+      _mesh?.broadcastBoard({'type': 'point', 'id': id, 'x': x, 'y': y});
+    }
+  }
+
+  void _strokeEnd() {
+    final id = _activeStrokeId;
+    if (id == null) return;
+    _activeStrokeId = null;
+    _mesh?.broadcastBoard({'type': 'end', 'id': id});
+  }
+
+  void _boardClear() {
+    setState(_strokes.clear);
+    _mesh?.broadcastBoard({'type': 'clear'});
+  }
+
   Future<void> _playVoice(_ChatMessage message, String key) async {
     final bytes = message.voiceBytes;
     if (bytes == null) return;
@@ -489,57 +570,123 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                 ],
-                Expanded(
-                  child: ListView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Row(
                     children: [
-                      for (var i = 0; i < _messages.length; i++) ...[
-                        _VoiceTile(
-                          key: ObjectKey(_messages[i]),
-                          message: _messages[i],
-                          self: _messages[i].self,
-                          isPlaying:
-                              _playingKey == '${_messages[i].author}/${_messages[i].time}',
-                          onPlay: () => _playVoice(
-                            _messages[i],
-                            '${_messages[i].author}/${_messages[i].time}',
-                          ),
-                        ),
-                        if (_messages[i].self &&
-                            !_messages[i].isVoice)
-                          SelfMessageBubble(
-                            time: _messages[i].time,
-                            text: _messages[i].text,
-                            delivered: true,
-                          )
-                        else if (!_messages[i].self &&
-                            !_messages[i].isVoice)
-                          PeerBubble(
-                            initial: _messages[i].author.isEmpty
-                                ? '?'
-                                : _messages[i].author[0].toUpperCase(),
-                            initialColor: AshColors.tertiary,
-                            time: _messages[i].time,
-                            text: _messages[i].text,
-                            peerLabel: _messages[i].author,
-                          ),
-                        if (i != _messages.length - 1)
-                          const SizedBox(height: 16),
-                      ],
-                      if (_messages.isEmpty) ...[
-                        const EmptyStateDivider(),
-                        const SizedBox(height: 16),
-                      ],
+                      _ViewPill(
+                        label: 'Feed',
+                        active: !_boardView,
+                        onTap: () => setState(() => _boardView = false),
+                      ),
+                      const SizedBox(width: 8),
+                      _ViewPill(
+                        label: 'Board',
+                        active: _boardView,
+                        onTap: () => setState(() => _boardView = true),
+                      ),
+                      const Spacer(),
+                      Icon(
+                        _boardView ? Icons.gesture : Icons.chat_bubble_outline,
+                        size: 18,
+                        color: AshColors.outline,
+                      ),
                     ],
                   ),
                 ),
-                Composer(
-                  onSend: _sendMessage,
-                  onAttach: _pickFile,
-                  onVoice: _handleVoiceRecorded,
-                ),
+                if (_boardView)
+                  Expanded(
+                    child: Whiteboard(
+                      strokes: _strokes,
+                      onStrokeStart: _strokeStart,
+                      onStrokePoint: _strokePoint,
+                      onStrokeEnd: _strokeEnd,
+                      onClear: _boardClear,
+                    ),
+                  )
+                else
+                  Expanded(
+                    child: ListView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+                      children: [
+                        for (var i = 0; i < _messages.length; i++) ...[
+                          _VoiceTile(
+                            key: ObjectKey(_messages[i]),
+                            message: _messages[i],
+                            self: _messages[i].self,
+                            isPlaying:
+                                _playingKey == '${_messages[i].author}/${_messages[i].time}',
+                            onPlay: () => _playVoice(
+                              _messages[i],
+                              '${_messages[i].author}/${_messages[i].time}',
+                            ),
+                          ),
+                          if (_messages[i].self &&
+                              !_messages[i].isVoice)
+                            SelfMessageBubble(
+                              time: _messages[i].time,
+                              text: _messages[i].text,
+                              delivered: true,
+                            )
+                          else if (!_messages[i].self &&
+                              !_messages[i].isVoice)
+                            PeerBubble(
+                              initial: _messages[i].author.isEmpty
+                                  ? '?'
+                                  : _messages[i].author[0].toUpperCase(),
+                              initialColor: AshColors.tertiary,
+                              time: _messages[i].time,
+                              text: _messages[i].text,
+                              peerLabel: _messages[i].author,
+                            ),
+                          if (i != _messages.length - 1)
+                            const SizedBox(height: 16),
+                        ],
+                        if (_messages.isEmpty) ...[
+                          const EmptyStateDivider(),
+                          const SizedBox(height: 16),
+                        ],
+                      ],
+                    ),
+                  ),
+                if (!_boardView)
+                  Composer(
+                    onSend: _sendMessage,
+                    onAttach: _pickFile,
+                    onVoice: _handleVoiceRecorded,
+                  ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ViewPill extends StatelessWidget {
+  const _ViewPill({required this.label, required this.active, required this.onTap});
+
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: active ? AshColors.surfaceContainerHigh : Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          child: Text(
+            label,
+            style: AshText.labelMd(
+              active ? AshColors.onSurface : AshColors.outline,
+              weight: active ? FontWeight.w600 : FontWeight.w400,
             ),
           ),
         ),

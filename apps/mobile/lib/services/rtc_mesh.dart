@@ -65,6 +65,7 @@ class RtcMeshCallbacks {
   void Function(String? peerId)? onFileCancelled;
   void Function(String from, String name, Uint8List bytes, int durationSec)?
       onVoice;
+  void Function(String from, Map<String, dynamic> event)? onBoard;
 }
 
 class _PeerConn {
@@ -176,6 +177,8 @@ class RtcMesh {
           callbacks.onMessage?.call(peerId, data['text'] as String);
         } else if (data['kind'] == 'file' || data['kind'] == 'voice') {
           _handleFileControl(peerId, channel, data);
+        } else if (data['kind'] == 'board') {
+          callbacks.onBoard?.call(peerId, data);
         }
       } catch (_) {
         // ignore malformed frames
@@ -543,6 +546,34 @@ class RtcMesh {
         unawaited(channel.send(RTCDataChannelMessage(payload)));
       }
     }
+  }
+
+  /// Stream a whiteboard drawing event to every connected peer.
+  void broadcastBoard(Map<String, dynamic> event) {
+    final payload = jsonEncode({'kind': 'board', ...event});
+    for (final conn in _conns.values) {
+      final channel = conn.channel;
+      if (channel != null &&
+          channel.state == RTCDataChannelState.RTCDataChannelOpen) {
+        unawaited(channel.send(RTCDataChannelMessage(payload)));
+      }
+    }
+  }
+
+  /// Send the full board state to one peer (late-join sync).
+  void sendBoardSync(String peerId, List<Map<String, dynamic>> strokes) {
+    final conn = _conns[peerId];
+    final channel = conn?.channel;
+    if (conn == null ||
+        channel == null ||
+        channel.state != RTCDataChannelState.RTCDataChannelOpen) {
+      return;
+    }
+    unawaited(channel.send(RTCDataChannelMessage(jsonEncode({
+      'kind': 'board',
+      'type': 'sync',
+      'strokes': strokes,
+    }))));
   }
 
   Future<void> close() async {
