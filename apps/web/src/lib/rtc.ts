@@ -1,4 +1,12 @@
-import { seal, unseal, type Envelope, type Identity } from './crypto'
+import {
+  b64ToBuf,
+  bufToB64,
+  decryptBlock,
+  deriveSessionKey,
+  encryptBlock,
+  newNonce,
+  type Identity,
+} from './crypto'
 import type { Settings } from './settings'
 
 const STUN_SERVERS: RTCIceServer[] = [
@@ -108,7 +116,7 @@ interface IncomingFile {
   id: string
   name: string
   size: number
-  parts: ArrayBuffer[]
+  parts: BlobPart[]
   received: number
   kind: 'file' | 'voice'
   durationMs: number
@@ -137,6 +145,7 @@ export interface MeshCallbacks {
 export class RtcMesh {
   private conns = new Map<string, PeerConn>()
   private peerPub = new Map<string, string>()
+  private sessionKey = new Map<string, CryptoKey>()
   private selfId: string
   private sendSignal: SignalSender
   private callbacks: MeshCallbacks
@@ -233,21 +242,20 @@ export class RtcMesh {
         try {
           const msg = JSON.parse(data) as {
             kind?: string
-            text?: string
             action?: string
             pub?: string
-            env?: Envelope
+            nonce?: string
+            ct?: string
           }
           if (msg.kind === 'e2ee' && msg.action === 'key' && typeof msg.pub === 'string') {
             this.peerPub.set(peerId, msg.pub)
-          } else if (msg.kind === 'enc' && msg.env) {
-            void this.handleEncrypted(peerId, msg.env)
-          } else if (msg.kind === 'chat' && typeof msg.text === 'string') {
-            this.callbacks.onMessage(peerId, msg.text)
-          } else if (msg.kind === 'file' || msg.kind === 'voice') {
-            this.handleTransferControl(peerId, channel, msg)
-          } else if (msg.kind === 'board') {
-            this.callbacks.onBoard(peerId, msg as unknown as BoardEvent)
+            void this.ensureSessionKey(peerId).catch(() => {})
+          } else if (
+            msg.kind === 'esc' &&
+            typeof msg.nonce === 'string' &&
+            typeof msg.ct === 'string'
+          ) {
+            void this.handleDecrypted(peerId, channel, msg.nonce, msg.ct)
           }
         } catch {
           // ignore malformed frames
@@ -258,18 +266,62 @@ export class RtcMesh {
     }
   }
 
-  private async handleEncrypted(
-    peerId: string,
-    env: Envelope,
-  ): Promise<void> {
+  private async ensureSessionKey(peerId: string): Promise<CryptoKey | null> {
+    const cached = this.sessionKey.get(peerId)
+    if (cached) return cached
+    const peerPubRaw = this.peerPub.get(peerId)
+    if (!peerPubRaw) return null
     try {
-      const plain = await unseal(this.identity, env)
-      if (!plain) return
-      const inner = JSON.parse(
-        new TextDecoder().decode(plain),
-      ) as { kind?: string; text?: string }
+      const key = await deriveSessionKey(this.identity, peerPubRaw)
+      this.sessionKey.set(peerId, key)
+      return key
+    } catch {
+      return null
+    }
+  }
+
+  /** AES-GCM-encrypt an inner message with the peer's session key and send it. */
+  private async encryptJsonTo(
+    peerId: string,
+    channel: RTCDataChannel,
+    inner: unknown,
+  ): Promise<boolean> {
+    const key = await this.ensureSessionKey(peerId)
+    if (!key) return false
+    try {
+      const data = new Uint8Array(new TextEncoder().encode(JSON.stringify(inner)))
+      const nonce = newNonce()
+      const ct = await encryptBlock(key, nonce, data)
+      channel.send(
+        JSON.stringify({ kind: 'esc', nonce: bufToB64(nonce), ct: bufToB64(ct) }),
+      )
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private async handleDecrypted(
+    peerId: string,
+    channel: RTCDataChannel,
+    nonceB64: string,
+    ctB64: string,
+  ): Promise<void> {
+    const key = await this.ensureSessionKey(peerId)
+    if (!key) return
+    try {
+      const plain = await decryptBlock(key, b64ToBuf(nonceB64), b64ToBuf(ctB64))
+      const inner = JSON.parse(new TextDecoder().decode(plain)) as {
+        kind?: string
+        text?: string
+        action?: string
+      }
       if (inner.kind === 'chat' && typeof inner.text === 'string') {
         this.callbacks.onMessage(peerId, inner.text)
+      } else if (inner.kind === 'file' || inner.kind === 'voice') {
+        this.handleTransferControl(peerId, channel, inner)
+      } else if (inner.kind === 'board') {
+        this.callbacks.onBoard(peerId, inner as unknown as BoardEvent)
       }
     } catch {
       // ignore undecryptable payloads
@@ -329,7 +381,7 @@ export class RtcMesh {
   // --- File transfer (peer-to-peer over the DataChannel) ---
 
   /** Propose a file to one peer. The peer must accept before chunks flow. */
-  sendFile(peerId: string, file: File): boolean {
+  async sendFile(peerId: string, file: File): Promise<boolean> {
     const conn = this.conns.get(peerId)
     const channel = conn?.channel
     if (!conn || !channel || channel.readyState !== 'open' || conn.outgoing) {
@@ -337,21 +389,18 @@ export class RtcMesh {
     }
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
     conn.outgoing = { id, name: file.name, file, seq: 0, kind: 'file', durationMs: 0 }
-    channel.send(
-      JSON.stringify({
-        kind: 'file',
-        action: 'offer',
-        id,
-        name: file.name,
-        size: file.size,
-        mime: file.type,
-      }),
-    )
-    return true
+    return this.encryptJsonTo(peerId, channel, {
+      kind: 'file',
+      action: 'offer',
+      id,
+      name: file.name,
+      size: file.size,
+      mime: file.type,
+    })
   }
 
   /** Send a voice message blob to one peer. Accepted automatically, held in RAM only. */
-  sendVoice(peerId: string, blob: Blob, durationMs: number): boolean {
+  async sendVoice(peerId: string, blob: Blob, durationMs: number): Promise<boolean> {
     const conn = this.conns.get(peerId)
     const channel = conn?.channel
     if (!conn || !channel || channel.readyState !== 'open' || conn.outgoing) {
@@ -366,17 +415,14 @@ export class RtcMesh {
       kind: 'voice',
       durationMs,
     }
-    channel.send(
-      JSON.stringify({
-        kind: 'voice',
-        action: 'offer',
-        id,
-        size: blob.size,
-        mime: blob.type,
-        durationMs,
-      }),
-    )
-    return true
+    return this.encryptJsonTo(peerId, channel, {
+      kind: 'voice',
+      action: 'offer',
+      id,
+      size: blob.size,
+      mime: blob.type,
+      durationMs,
+    })
   }
 
   acceptFile(peerId: string, id: string): void {
@@ -395,7 +441,7 @@ export class RtcMesh {
       }
       conn.pendingOffer = null
     }
-    channel.send(JSON.stringify({ kind: 'file', action: 'accept', id }))
+    void this.encryptJsonTo(peerId, channel, { kind: 'file', action: 'accept', id })
   }
 
   declineFile(peerId: string, id: string): void {
@@ -403,7 +449,7 @@ export class RtcMesh {
     const channel = conn?.channel
     if (!conn || !channel) return
     if (conn.pendingOffer?.id === id) conn.pendingOffer = null
-    channel.send(JSON.stringify({ kind: 'file', action: 'decline', id }))
+    void this.encryptJsonTo(peerId, channel, { kind: 'file', action: 'decline', id })
   }
 
   cancelFile(peerId: string, id: string): void {
@@ -415,7 +461,7 @@ export class RtcMesh {
       if (conn.pendingOffer?.id === id) conn.pendingOffer = null
     }
     if (channel) {
-      channel.send(JSON.stringify({ kind: 'file', action: 'cancel', id }))
+      void this.encryptJsonTo(peerId, channel, { kind: 'file', action: 'cancel', id })
     }
   }
 
@@ -446,7 +492,11 @@ export class RtcMesh {
             kind: 'voice',
             durationMs: msg.durationMs ?? 0,
           }
-          channel.send(JSON.stringify({ kind: 'voice', action: 'accept', id: msg.id }))
+          void this.encryptJsonTo(peerId, channel, {
+            kind: 'voice',
+            action: 'accept',
+            id: msg.id,
+          })
         } else if (
           typeof msg.id === 'string' &&
           !conn.pendingOffer &&
@@ -460,7 +510,11 @@ export class RtcMesh {
           }
           this.callbacks.onFileOffer(peerId, conn.pendingOffer)
         } else {
-          channel.send(JSON.stringify({ kind: 'file', action: 'decline', id: msg.id }))
+          void this.encryptJsonTo(peerId, channel, {
+            kind: 'file',
+            action: 'decline',
+            id: msg.id,
+          })
         }
         break
       case 'accept':
@@ -490,6 +544,8 @@ export class RtcMesh {
     if (!out) return
     const CHUNK = 16384
     const backpressure = 1 << 21 // ~2MB queued before we wait
+    const key = await this.ensureSessionKey(peerId)
+    if (!key) return
     while (out.seq < out.file.size) {
       if (conn.outgoing !== out) break // cancelled
       while (channel.bufferedAmount > backpressure) {
@@ -498,8 +554,17 @@ export class RtcMesh {
       }
       if (channel.readyState !== 'open') break
       const end = Math.min(out.file.size, out.seq + CHUNK)
-      const chunk = await out.file.slice(out.seq, end).arrayBuffer()
-      channel.send(chunk)
+      const raw = new Uint8Array(await out.file.slice(out.seq, end).arrayBuffer())
+      try {
+        const nonce = newNonce()
+        const ct = await encryptBlock(key, nonce, raw)
+        const framed = new Uint8Array(12 + ct.length)
+        framed.set(nonce, 0)
+        framed.set(ct, 12)
+        channel.send(framed)
+      } catch {
+        break // auth/encryption failure
+      }
       out.seq = end
       if (out.kind === 'file') {
         this.emitProgress(
@@ -545,26 +610,34 @@ export class RtcMesh {
     }
   }
 
-  private handleFileChunk(
+  private async handleFileChunk(
     peerId: string,
     data: ArrayBuffer | ArrayBufferView,
-  ): void {
+  ): Promise<void> {
     const conn = this.conns.get(peerId)
     const inc = conn?.incoming
     if (!conn || !inc) return
-    const chunk: ArrayBuffer =
+    const key = await this.ensureSessionKey(peerId)
+    if (!key) return
+    const raw: Uint8Array<ArrayBuffer> =
       data instanceof ArrayBuffer
-        ? data
+        ? new Uint8Array(data)
         : (() => {
             const view = data as ArrayBufferView
-            const buf = new ArrayBuffer(view.byteLength)
-            new Uint8Array(buf).set(
+            const copy = new Uint8Array(view.byteLength)
+            copy.set(
               new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
             )
-            return buf
+            return copy
           })()
-    inc.parts.push(chunk)
-    inc.received += chunk.byteLength
+    try {
+      const plain = await decryptBlock(key, raw.slice(0, 12), raw.slice(12))
+      inc.parts.push(plain)
+      inc.received += plain.byteLength
+    } catch {
+      conn.incoming = null // auth failure -> abort this transfer
+      return
+    }
     if (inc.kind === 'file') {
       this.emitProgress(
         peerId,
@@ -596,36 +669,30 @@ export class RtcMesh {
 
   /** Encrypt and send a chat message to every connected peer whose key we know. */
   async broadcast(text: string): Promise<void> {
-    const inner = new TextEncoder().encode(JSON.stringify({ kind: 'chat', text }))
     for (const [peerId, conn] of this.conns) {
-      const pub = this.peerPub.get(peerId)
-      if (!pub || !conn.channel || conn.channel.readyState !== 'open') continue
-      try {
-        const env = await seal(this.identity, new Uint8Array(inner), [pub])
-        conn.channel.send(JSON.stringify({ kind: 'enc', env }))
-      } catch {
-        // skip peer on encryption error
-      }
+      if (!conn.channel || conn.channel.readyState !== 'open') continue
+      await this.encryptJsonTo(peerId, conn.channel, { kind: 'chat', text })
     }
   }
 
   /** Stream a whiteboard drawing event to every connected peer. */
-  broadcastBoard(event: BoardEvent): void {
-    const payload = JSON.stringify({ kind: 'board', ...event })
-    for (const conn of this.conns.values()) {
-      if (conn.channel && conn.channel.readyState === 'open') {
-        conn.channel.send(payload)
-      }
+  async broadcastBoard(event: BoardEvent): Promise<void> {
+    for (const [peerId, conn] of this.conns) {
+      if (!conn.channel || conn.channel.readyState !== 'open') continue
+      await this.encryptJsonTo(peerId, conn.channel, { kind: 'board', ...event })
     }
   }
 
   /** Send the full board state to one peer (late-join sync over its channel). */
-  sendBoardSync(peerId: string, strokes: BoardStroke[]): boolean {
+  async sendBoardSync(peerId: string, strokes: BoardStroke[]): Promise<boolean> {
     const conn = this.conns.get(peerId)
     const channel = conn?.channel
     if (!conn || !channel || channel.readyState !== 'open') return false
-    channel.send(JSON.stringify({ kind: 'board', type: 'sync', strokes }))
-    return true
+    return this.encryptJsonTo(peerId, channel, {
+      kind: 'board',
+      type: 'sync',
+      strokes,
+    })
   }
 
   /** Start broadcasting a screen/display stream to every connected peer. */

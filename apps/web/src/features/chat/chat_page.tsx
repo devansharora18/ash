@@ -168,7 +168,7 @@ function ChatPage({
           setConnections((prev) => ({ ...prev, [peerId]: connected }))
           if (!connected) return
           if (strokesRef.current.length > 0) {
-            meshRef.current?.sendBoardSync(peerId, strokesRef.current)
+            void meshRef.current?.sendBoardSync(peerId, strokesRef.current)
           }
           if (sharingRef.current) {
             meshRef.current?.attachScreenShare(peerId)
@@ -394,7 +394,7 @@ function ChatPage({
       .filter(([, connected]) => connected)
       .map(([peerId]) => peerId)
     for (const peerId of targets) {
-      meshRef.current?.sendVoice(peerId, blob, durationMs)
+      void meshRef.current?.sendVoice(peerId, blob, durationMs)
     }
     setView('chat')
   }
@@ -408,7 +408,7 @@ function ChatPage({
 
   const sendFileTo = async (peerId: string) => {
     if (!sendFile) return
-    meshRef.current?.sendFile(peerId, sendFile)
+    void meshRef.current?.sendFile(peerId, sendFile)
     setSendFile(null)
   }
 
@@ -433,7 +433,7 @@ function ChatPage({
     const id = boardNewId()
     activeStrokeRef.current = id
     setStrokes((prev) => [...prev, { id, color, width, points: [{ x, y }] }])
-    meshRef.current?.broadcastBoard({ type: 'start', id, color, width, x, y })
+    void meshRef.current?.broadcastBoard({ type: 'start', id, color, width, x, y })
   }
 
   const handleStrokePoint = (x: number, y: number) => {
@@ -444,19 +444,19 @@ function ChatPage({
         s.id === id ? { ...s, points: [...s.points, { x, y }] } : s,
       ),
     )
-    meshRef.current?.broadcastBoard({ type: 'point', id, x, y })
+    void meshRef.current?.broadcastBoard({ type: 'point', id, x, y })
   }
 
   const handleStrokeEnd = () => {
     const id = activeStrokeRef.current
     if (!id) return
     activeStrokeRef.current = null
-    meshRef.current?.broadcastBoard({ type: 'end', id })
+    void meshRef.current?.broadcastBoard({ type: 'end', id })
   }
 
   const handleBoardClear = () => {
     setStrokes([])
-    meshRef.current?.broadcastBoard({ type: 'clear' })
+    void meshRef.current?.broadcastBoard({ type: 'clear' })
   }
 
   const toggleScreenShare = () => {
