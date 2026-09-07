@@ -1,5 +1,7 @@
+import { motion } from 'framer-motion'
 import { Container, Laptop, Server, Wifi } from 'lucide-react'
 
+import { staggerContainer, staggerItem } from '../lib/anim'
 import SectionShell from './section_shell'
 
 const targets = [
@@ -28,9 +30,19 @@ function Deploy() {
       title="Infrastructure you control."
       lead="No managed backend required. The entire coordination layer is a boring, single-process server you can run anywhere and tear down on a whim."
     >
-      <div className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high md:grid-cols-3">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high md:grid-cols-3"
+      >
         {targets.map(({ icon: Icon, title, body }) => (
-          <div key={title} className="flex flex-col gap-4 bg-surface-container-lowest p-6">
+          <motion.div
+            key={title}
+            variants={staggerItem}
+            className="flex flex-col gap-4 bg-surface-container-lowest p-6"
+          >
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
               <Icon className="h-4 w-4 text-primary-container" />
             </div>
@@ -40,21 +52,33 @@ function Deploy() {
             <p className="font-sans text-body-sm leading-relaxed text-on-surface-variant">
               {body}
             </p>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
 
-      <div className="rounded-xl border border-surface-container-high bg-surface-container-lowest">
-        <div className="flex items-center justify-between border-b border-surface-container-high px-5 py-3">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        className="rounded-xl border border-surface-container-high bg-surface-container-lowest"
+      >
+        <motion.div
+          variants={staggerItem}
+          className="flex items-center justify-between border-b border-surface-container-high px-5 py-3"
+        >
           <span className="font-sans text-body-sm-medium text-on-surface">signaling server</span>
           <Server className="h-4 w-4 text-on-surface-variant" />
-        </div>
-        <pre className="overflow-x-auto p-5 font-mono text-code-inline leading-relaxed text-on-surface-variant">
+        </motion.div>
+        <motion.pre
+          variants={staggerItem}
+          className="overflow-x-auto p-5 font-mono text-code-inline leading-relaxed text-on-surface-variant"
+        >
 {`$ docker compose up -d
 $ curl http://localhost:8000/health
 {"status":"ok"}`}
-        </pre>
-      </div>
+        </motion.pre>
+      </motion.div>
     </SectionShell>
   )
 }
