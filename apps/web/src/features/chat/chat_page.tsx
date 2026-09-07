@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send, Volume2, VolumeX, X } from 'lucide-react'
+import { Send, X } from 'lucide-react'
 
 import {
   RtcMesh,
@@ -20,6 +20,7 @@ import { type ChatMessage } from './message_feed'
 import NavSidebar from './nav_sidebar'
 import QrModal from './qr_modal'
 import RoomSidebar from './room_sidebar'
+import type { ShareSource } from './share_view'
 
 type ConnectionStatus =
   | { kind: 'connecting' }
@@ -98,6 +99,7 @@ function ChatPage({
   const [transfers, setTransfers] = useState<TransferItem[]>([])
   const [strokes, setStrokes] = useState<BoardStroke[]>([])
   const [sharingScreen, setSharingScreen] = useState(false)
+  const [localShareStream, setLocalShareStream] = useState<MediaStream | null>(null)
   const [remoteScreens, setRemoteScreens] = useState<
     { peerId: string; stream: MediaStream }[]
   >([])
@@ -316,6 +318,25 @@ function ChatPage({
 
   const connectedCount = Object.values(connections).filter(Boolean).length
 
+  const shareSources: ShareSource[] = [
+    ...(localShareStream
+      ? [
+          {
+            key: 'self',
+            label: displayName,
+            stream: localShareStream,
+            isSelf: true,
+          },
+        ]
+      : []),
+    ...remoteScreens.map((s) => ({
+      key: s.peerId,
+      label: s.peerId,
+      stream: s.stream,
+      isSelf: false,
+    })),
+  ]
+
   const handleSend = (text: string) => {
     setMessages((prev) => [
       ...prev,
@@ -428,6 +449,7 @@ function ChatPage({
       meshRef.current?.stopScreenShare()
       sharingRef.current = false
       setSharingScreen(false)
+      setLocalShareStream(null)
       return
     }
     void (async () => {
@@ -439,10 +461,12 @@ function ChatPage({
         meshRef.current?.startScreenShare(stream)
         sharingRef.current = true
         setSharingScreen(true)
+        setLocalShareStream(stream)
         const ended = () => {
           meshRef.current?.stopScreenShare()
           sharingRef.current = false
           setSharingScreen(false)
+          setLocalShareStream(null)
         }
         for (const track of stream.getTracks()) {
           track.addEventListener('ended', ended)
@@ -508,6 +532,7 @@ function ChatPage({
               onBoardClear={handleBoardClear}
               sharingScreen={sharingScreen}
               onToggleScreenShare={toggleScreenShare}
+              shareSources={shareSources}
             />
           </div>
         </main>
@@ -619,22 +644,6 @@ function ChatPage({
           })}
         </div>
       )}
-      {remoteScreens.length > 0 && (
-        <div className="fixed right-4 top-4 z-50 flex w-80 flex-col gap-3">
-          {remoteScreens.map(({ peerId, stream }) => (
-            <ScreenTile
-              key={peerId}
-              name={peerId}
-              stream={stream}
-              onClose={() =>
-                setRemoteScreens((prev) =>
-                  prev.filter((s) => s.peerId !== peerId),
-                )
-              }
-            />
-          ))}
-        </div>
-      )}
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-surface-container-high px-4 py-2 font-sans text-body-sm text-on-surface shadow-xl">
           {toast}
@@ -645,57 +654,3 @@ function ChatPage({
 }
 
 export default ChatPage
-
-interface ScreenTileProps {
-  name: string
-  stream: MediaStream
-  onClose: () => void
-}
-
-function ScreenTile({ name, stream, onClose }: ScreenTileProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [muted, setMuted] = useState(true)
-
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream
-  }, [stream])
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-lowest shadow-xl">
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="truncate font-sans text-body-sm-medium text-on-surface">
-          Screen · {name}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setMuted((m) => !m)}
-            title={muted ? 'Unmute' : 'Mute'}
-            className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          >
-            {muted ? (
-              <VolumeX className="h-4 w-4" />
-            ) : (
-              <Volume2 className="h-4 w-4" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close screen share"
-            className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted={muted}
-        className="aspect-video w-full bg-black"
-      />
-    </div>
-  )
-}

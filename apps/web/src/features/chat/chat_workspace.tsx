@@ -3,6 +3,7 @@ import { Flame, Lock, Maximize2, Minimize2, MonitorUp } from 'lucide-react'
 
 import Composer from './composer'
 import MessageFeed, { type ChatMessage } from './message_feed'
+import ShareView, { type ShareSource } from './share_view'
 import Whiteboard, { type BoardStroke } from './whiteboard'
 
 export type ChatView = 'chat' | 'empty' | 'loading'
@@ -25,6 +26,7 @@ interface ChatWorkspaceProps {
   onBoardClear: () => void
   sharingScreen: boolean
   onToggleScreenShare: () => void
+  shareSources: ShareSource[]
 }
 
 const viewTabs: { key: ChatView; label: string }[] = [
@@ -92,9 +94,11 @@ function ChatWorkspace({
   onBoardClear,
   sharingScreen,
   onToggleScreenShare,
+  shareSources,
 }: ChatWorkspaceProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
-  const [boardFullscreen, setBoardFullscreen] = useState(false)
+  const [panelFullscreen, setPanelFullscreen] = useState(false)
+  const hasShare = shareSources.length > 0
 
   useEffect(() => {
     const el = viewportRef.current
@@ -135,11 +139,15 @@ function ChatWorkspace({
           </div>
           <button
             type="button"
-            title={boardFullscreen ? 'Split view with chat' : 'Fullscreen whiteboard'}
-            onClick={() => setBoardFullscreen((v) => !v)}
+            title={
+              panelFullscreen
+                ? 'Return to split view'
+                : `Fullscreen ${hasShare ? 'screen share' : 'whiteboard'}`
+            }
+            onClick={() => setPanelFullscreen((v) => !v)}
             className="rounded-lg p-1.5 text-outline transition-colors hover:bg-surface-container-low hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary-container"
           >
-            {boardFullscreen ? (
+            {panelFullscreen ? (
               <Minimize2 className="h-[18px] w-[18px]" />
             ) : (
               <Maximize2 className="h-[18px] w-[18px]" />
@@ -169,7 +177,7 @@ function ChatWorkspace({
       </div>
 
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!boardFullscreen && (
+        {!panelFullscreen && (
           <div className="flex min-w-0 flex-1 flex-col border-r border-surface-container-high">
             <div
               ref={viewportRef}
@@ -196,13 +204,17 @@ function ChatWorkspace({
             />
           </div>
         )}
-        <Whiteboard
-          strokes={strokes}
-          onStrokeStart={onStrokeStart}
-          onStrokePoint={onStrokePoint}
-          onStrokeEnd={onStrokeEnd}
-          onClear={onBoardClear}
-        />
+        {hasShare ? (
+          <ShareView sources={shareSources} />
+        ) : (
+          <Whiteboard
+            strokes={strokes}
+            onStrokeStart={onStrokeStart}
+            onStrokePoint={onStrokePoint}
+            onStrokeEnd={onStrokeEnd}
+            onClear={onBoardClear}
+          />
+        )}
       </div>
     </div>
   )
