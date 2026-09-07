@@ -17,42 +17,59 @@ const columns = [
       { label: 'Deploy tool', href: 'https://github.com/devansharora18/ash/tree/main/apps/desktop' },
     ],
   },
+  {
+    heading: 'Clients',
+    links: [
+      { label: 'Web app', href: 'https://github.com/devansharora18/ash/tree/main/apps/web' },
+      { label: 'Mobile', href: 'https://github.com/devansharora18/ash/tree/main/apps/mobile' },
+      { label: 'Desktop', href: 'https://github.com/devansharora18/ash/tree/main/apps/desktop' },
+    ],
+  },
 ]
+
+function FooterLink({ label, href }: { label: string; href: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="group inline-flex items-center font-sans text-body-sm text-on-surface-variant transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+    >
+      <span className="relative">
+        {label}
+        <span className="absolute inset-x-0 -bottom-0.5 h-px origin-left scale-x-0 bg-primary-container transition-transform duration-200 group-hover:scale-x-100" />
+      </span>
+    </a>
+  )
+}
 
 function Footer() {
   return (
-    <footer className="bg-surface-container-lowest">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-14">
-        <div className="grid gap-10 md:grid-cols-4">
-          <div className="flex flex-col gap-3 md:col-span-2">
+    <footer className="border-t border-surface-container-high bg-surface-container-lowest/60">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 py-16">
+        <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
               <span className="font-sans text-headline-md font-semibold lowercase tracking-tight text-on-surface">
                 ash
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container" />
             </div>
-            <p className="max-w-sm font-sans text-body-sm leading-relaxed text-on-surface-variant">
+            <p className="max-w-xs font-sans text-body-sm leading-relaxed text-on-surface-variant">
               Disposable, self-hostable, end-to-end encrypted peer-to-peer chat.
               The server introduces peers and then gets out of the way.
             </p>
           </div>
 
           {columns.map((column) => (
-            <nav key={column.heading} className="flex flex-col gap-3" aria-label={column.heading}>
+            <nav key={column.heading} className="flex flex-col gap-4" aria-label={column.heading}>
               <p className="font-mono text-code-inline uppercase tracking-widest text-on-surface-variant">
                 {column.heading}
               </p>
-              <ul className="flex flex-col gap-2">
+              <ul className="flex flex-col gap-2.5">
                 {column.links.map((link) => (
                   <li key={link.label}>
-                    <a
-                      href={link.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-sans text-body-sm text-on-surface-variant transition-colors hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
-                    >
-                      {link.label}
-                    </a>
+                    <FooterLink label={link.label} href={link.href} />
                   </li>
                 ))}
               </ul>
