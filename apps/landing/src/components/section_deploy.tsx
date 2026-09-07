@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
-import { Container, Laptop, Server, Wifi } from 'lucide-react'
+import { Container, Laptop, Wifi } from 'lucide-react'
 
+import DeployTerminal from './deploy_terminal'
 import { staggerContainer, staggerItem } from '../lib/anim'
 import SectionShell from './section_shell'
 
@@ -29,56 +30,46 @@ function Deploy() {
       eyebrow="Self-host"
       title="Infrastructure you control."
       lead="No managed backend required. The entire coordination layer is a boring, single-process server you can run anywhere and tear down on a whim."
+      width="wide"
     >
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
-        className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high md:grid-cols-3"
-      >
-        {targets.map(({ icon: Icon, title, body }) => (
-          <motion.div
-            key={title}
-            variants={staggerItem}
-            className="flex flex-col gap-4 bg-surface-container-lowest p-6"
-          >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
-              <Icon className="h-4 w-4 text-primary-container" />
-            </div>
-            <h3 className="font-sans text-headline-md font-medium tracking-tight text-on-surface">
-              {title}
-            </h3>
-            <p className="font-sans text-body-sm leading-relaxed text-on-surface-variant">
-              {body}
-            </p>
-          </motion.div>
-        ))}
-      </motion.div>
+      <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-80px' }}
+          className="flex flex-col gap-4"
+        >
+          {targets.map(({ icon: Icon, title, body }) => (
+            <motion.div
+              key={title}
+              variants={staggerItem}
+              className="flex items-start gap-4 rounded-xl border border-surface-container-high bg-surface-container-lowest/70 p-5 backdrop-blur-sm"
+            >
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
+                <Icon className="h-4 w-4 text-primary-container" />
+              </div>
+              <div>
+                <h3 className="font-sans text-headline-sm font-semibold tracking-tight text-on-surface">
+                  {title}
+                </h3>
+                <p className="mt-1 font-sans text-body-sm leading-relaxed text-on-surface-variant">
+                  {body}
+                </p>
+              </div>
+            </motion.div>
+          ))}
+        </motion.div>
 
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
-        className="rounded-xl border border-surface-container-high bg-surface-container-lowest"
-      >
         <motion.div
           variants={staggerItem}
-          className="flex items-center justify-between border-b border-surface-container-high px-5 py-3"
+          initial="hidden"
+          whileInView="visible"
+          viewport={{ once: true, margin: '-80px' }}
         >
-          <span className="font-sans text-body-sm-medium text-on-surface">signaling server</span>
-          <Server className="h-4 w-4 text-on-surface-variant" />
+          <DeployTerminal />
         </motion.div>
-        <motion.pre
-          variants={staggerItem}
-          className="overflow-x-auto p-5 font-mono text-code-inline leading-relaxed text-on-surface-variant"
-        >
-{`$ docker compose up -d
-$ curl http://localhost:8000/health
-{"status":"ok"}`}
-        </motion.pre>
-      </motion.div>
+      </div>
     </SectionShell>
   )
 }
