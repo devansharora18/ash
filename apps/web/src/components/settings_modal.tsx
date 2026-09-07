@@ -15,6 +15,9 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
   const [turnUrl, setTurnUrl] = useState(settings.turnUrl)
   const [turnUsername, setTurnUsername] = useState(settings.turnUsername)
   const [turnCredential, setTurnCredential] = useState(settings.turnCredential)
+  const [turnCredentialsUrl, setTurnCredentialsUrl] = useState(
+    settings.turnCredentialsUrl,
+  )
   const [error, setError] = useState<string | null>(null)
 
   const handleSave = () => {
@@ -38,6 +41,7 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
       turnUrl: turnUrl.trim(),
       turnUsername: turnUsername.trim(),
       turnCredential: turnCredential.trim(),
+      turnCredentialsUrl: turnCredentialsUrl.trim(),
     })
     onClose()
   }
@@ -177,6 +181,23 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
                   className={`${inputCls} font-mono text-code-inline`}
                 />
               </div>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="settings-turn-api" className={labelCls}>
+                Credentials endpoint (Metered API — overrides above)
+              </label>
+              <input
+                id="settings-turn-api"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="https://your-app.metered.live/api/v1/turn/credentials?apiKey=…"
+                value={turnCredentialsUrl}
+                onChange={(event) => {
+                  setTurnCredentialsUrl(event.target.value)
+                  setError(null)
+                }}
+                className={`${inputCls} font-mono text-code-inline`}
+              />
             </div>
           </div>
 

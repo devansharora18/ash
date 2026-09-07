@@ -4,6 +4,7 @@ export interface Settings {
   turnUrl: string
   turnUsername: string
   turnCredential: string
+  turnCredentialsUrl: string
 }
 
 const STORAGE_KEY = 'ash.settings'
@@ -20,6 +21,7 @@ export function defaultSettings(): Settings {
     turnUrl: '',
     turnUsername: '',
     turnCredential: '',
+    turnCredentialsUrl: '',
   }
 }
 
@@ -42,6 +44,7 @@ export function loadSettings(): Settings {
       turnUrl: str(parsed.turnUrl, ''),
       turnUsername: str(parsed.turnUsername, ''),
       turnCredential: str(parsed.turnCredential, ''),
+      turnCredentialsUrl: str(parsed.turnCredentialsUrl, ''),
     }
   } catch {
     return fallback

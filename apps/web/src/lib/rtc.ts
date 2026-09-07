@@ -21,6 +21,31 @@ export function buildIceServers(settings: Settings): RTCIceServer[] {
   return servers
 }
 
+/**
+ * Resolve the ICE servers to feed RTCPeerConnection. When a Metered-style
+ * credentials endpoint is configured, fetch rotating TURN credentials from it
+ * (its response is already a ready-to-use `iceServers` array); otherwise fall
+ * back to the static STUN + TURN list.
+ */
+export async function resolveIceServers(
+  settings: Settings,
+): Promise<RTCIceServer[]> {
+  if (settings.turnCredentialsUrl) {
+    try {
+      const res = await fetch(settings.turnCredentialsUrl)
+      if (res.ok) {
+        const json: unknown = await res.json()
+        if (Array.isArray(json) && json.length > 0) {
+          return json as RTCIceServer[]
+        }
+      }
+    } catch {
+      // fall through to static servers
+    }
+  }
+  return buildIceServers(settings)
+}
+
 type RtcSignal =
   | { type: 'offer'; description: RTCSessionDescriptionInit }
   | { type: 'answer'; description: RTCSessionDescriptionInit }

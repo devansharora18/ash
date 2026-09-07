@@ -5,7 +5,7 @@ import SiteHeader from './components/site_header'
 import SettingsModal from './components/settings_modal'
 import ChatPage from './features/chat/chat_page'
 import HomePage from './features/home/home_page'
-import { buildIceServers } from './lib/rtc'
+import { resolveIceServers } from './lib/rtc'
 import { loadSettings, saveSettings, type Settings } from './lib/settings'
 
 function initialRoom(): string | null {
@@ -19,8 +19,11 @@ function App() {
   const [roomId, setRoomId] = useState<string | null>(initialRoom())
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [iceServers, setIceServers] = useState<RTCIceServer[]>([])
 
-  const enterChat = (id: string) => {
+  const enterChat = async (id: string) => {
+    const servers = await resolveIceServers(settings)
+    setIceServers(servers)
     setRoomId(id)
     setPage('chat')
   }
@@ -42,7 +45,7 @@ function App() {
         displayName={settings.displayName}
         backendUrl={settings.backendUrl}
         roomId={roomId}
-        iceServers={buildIceServers(settings)}
+        iceServers={iceServers}
         onLeave={handleLeave}
       />
     )
