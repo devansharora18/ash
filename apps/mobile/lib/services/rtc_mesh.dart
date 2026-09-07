@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:http/http.dart' as http;
 
 import 'settings_service.dart';
 
@@ -17,6 +18,31 @@ List<Map<String, dynamic>> iceServersFor(AppSettings settings) => [
             'credential': settings.turnCredential,
         },
     ];
+
+/// Resolve ICE servers for the connection. When a Metered-style credentials
+/// endpoint is configured, fetch the rotating list from it (its response is
+/// already a ready-to-use `iceServers` array); otherwise fall back to the
+/// static STUN + TURN list.
+Future<List<Map<String, dynamic>>> resolveIceServers(
+  AppSettings settings,
+) async {
+  if (settings.turnCredentialsUrl.isNotEmpty) {
+    try {
+      final res = await http
+          .get(Uri.parse(settings.turnCredentialsUrl))
+          .timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        final json = jsonDecode(res.body);
+        if (json is List && json.isNotEmpty) {
+          return json.cast<Map<String, dynamic>>();
+        }
+      }
+    } catch (_) {
+      // fall through to static servers
+    }
+  }
+  return iceServersFor(settings);
+}
 
 /// Callbacks a chat screen uses to render mesh events. Keep it as a plain
 /// class so tests can wire them without the real transport.

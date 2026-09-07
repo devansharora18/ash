@@ -46,13 +46,15 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _enterChat(String roomId) {
+  Future<void> _enterChat(String roomId) async {
+    final iceServers = await resolveIceServers(widget.settings);
+    if (!mounted) return;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => ChatScreen(
         displayName: widget.settings.displayName,
         backendUrl: widget.settings.backendUrl,
         roomId: roomId,
-        iceServers: iceServersFor(widget.settings),
+        iceServers: iceServers,
       ),
     ));
   }

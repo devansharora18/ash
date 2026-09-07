@@ -10,6 +10,7 @@ class AppSettings {
     this.turnUrl = '',
     this.turnUsername = '',
     this.turnCredential = '',
+    this.turnCredentialsUrl = '',
   });
 
   final String displayName;
@@ -17,6 +18,7 @@ class AppSettings {
   final String turnUrl;
   final String turnUsername;
   final String turnCredential;
+  final String turnCredentialsUrl;
 
   AppSettings copyWith({
     String? displayName,
@@ -24,6 +26,7 @@ class AppSettings {
     String? turnUrl,
     String? turnUsername,
     String? turnCredential,
+    String? turnCredentialsUrl,
   }) =>
       AppSettings(
         displayName: displayName ?? this.displayName,
@@ -31,6 +34,7 @@ class AppSettings {
         turnUrl: turnUrl ?? this.turnUrl,
         turnUsername: turnUsername ?? this.turnUsername,
         turnCredential: turnCredential ?? this.turnCredential,
+        turnCredentialsUrl: turnCredentialsUrl ?? this.turnCredentialsUrl,
       );
 }
 
@@ -55,6 +59,7 @@ abstract final class SettingsService {
       turnUrl: s(map['turnUrl'] as String?),
       turnUsername: s(map['turnUsername'] as String?),
       turnCredential: s(map['turnCredential'] as String?),
+      turnCredentialsUrl: s(map['turnCredentialsUrl'] as String?),
     );
   }
 
@@ -80,6 +85,7 @@ abstract final class SettingsService {
         'turnUrl': settings.turnUrl,
         'turnUsername': settings.turnUsername,
         'turnCredential': settings.turnCredential,
+        'turnCredentialsUrl': settings.turnCredentialsUrl,
       }),
     );
   }

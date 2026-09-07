@@ -19,6 +19,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
   late final TextEditingController _turnUrl;
   late final TextEditingController _turnUsername;
   late final TextEditingController _turnCredential;
+  late final TextEditingController _turnCredentialsUrl;
   String? _error;
 
   @override
@@ -29,6 +30,8 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _turnUrl = TextEditingController(text: widget.settings.turnUrl);
     _turnUsername = TextEditingController(text: widget.settings.turnUsername);
     _turnCredential = TextEditingController(text: widget.settings.turnCredential);
+    _turnCredentialsUrl =
+        TextEditingController(text: widget.settings.turnCredentialsUrl);
   }
 
   @override
@@ -38,6 +41,7 @@ class _SettingsDialogState extends State<SettingsDialog> {
     _turnUrl.dispose();
     _turnUsername.dispose();
     _turnCredential.dispose();
+    _turnCredentialsUrl.dispose();
     super.dispose();
   }
 
@@ -66,7 +70,15 @@ class _SettingsDialogState extends State<SettingsDialog> {
       turnUrl: turnUrl,
       turnUsername: _turnUsername.text.trim(),
       turnCredential: _turnCredential.text.trim(),
+      turnCredentialsUrl: _turnCredentialsUrl.text.trim(),
     ));
+  }
+
+  void _useOpenRelay() {
+    _turnUrl.text = 'turn:openrelay.metered.ca:80';
+    _turnUsername.text = 'openrelayproject';
+    _turnCredential.text = 'openrelayproject';
+    setState(() => _error = null);
   }
 
   InputDecoration _decoration(String hint) => InputDecoration(
@@ -134,9 +146,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                 decoration: _decoration('http://localhost:8000'),
               ),
               const SizedBox(height: 12),
-              Text(
-                'TURN server (optional)',
-                style: AshText.labelSm(AshColors.outline),
+              Row(
+                children: [
+                  Text(
+                    'TURN server (optional)',
+                    style: AshText.labelSm(AshColors.outline),
+                  ),
+                  const Spacer(),
+                  InkWell(
+                    onTap: _useOpenRelay,
+                    child: Text(
+                      'Use OpenRelay (free)',
+                      style: AshText.labelSm(AshColors.tint),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               TextField(
@@ -168,6 +192,21 @@ class _SettingsDialogState extends State<SettingsDialog> {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Credentials endpoint (Metered API — overrides above)',
+                style: AshText.labelSm(AshColors.outline),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _turnCredentialsUrl,
+                keyboardType: TextInputType.url,
+                style: AshText.codeMd(AshColors.onSurface),
+                cursorColor: AshColors.tint,
+                decoration: _decoration(
+                  'https://your-app.metered.live/api/v1/turn/credentials?apiKey=…',
+                ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: 10),
