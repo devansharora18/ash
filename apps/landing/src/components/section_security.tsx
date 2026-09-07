@@ -1,3 +1,6 @@
+import { motion } from 'framer-motion'
+
+import { staggerContainer, staggerItem } from '../lib/anim'
 import SectionShell from './section_shell'
 
 function ArchitectureDiagram() {
@@ -71,12 +74,20 @@ function Security() {
     <SectionShell
       id="security"
       eyebrow="Security model"
-      title="The matchmaker never reads the mail."
+      title="The server never reads the conversation."
       lead="Peers agree on keys and encrypt locally with libsodium — X25519 key exchange and XSalsa20-Poly1305 authenticated encryption. The signaling path handles only handshake data."
     >
-      <div className="grid gap-6 lg:grid-cols-5">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        className="grid gap-6 lg:grid-cols-5"
+      >
         <div className="lg:col-span-3">
-          <ArchitectureDiagram />
+          <motion.div variants={staggerItem}>
+            <ArchitectureDiagram />
+          </motion.div>
           <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3">
             {facts.map((fact) => (
               <div key={fact.label} className="bg-surface-container-lowest p-4">
@@ -92,7 +103,7 @@ function Security() {
         </div>
 
         <div className="flex flex-col gap-4 lg:col-span-2">
-          <div className="rounded-xl border border-surface-container-high bg-surface-container-lowest p-6">
+          <motion.div variants={staggerItem} className="rounded-xl border border-surface-container-high bg-surface-container-lowest p-6">
             <p className="font-mono text-code-inline uppercase tracking-widest text-on-surface-variant">
               message path
             </p>
@@ -118,9 +129,9 @@ function Security() {
                 <span className="text-on-surface-variant">receiving peer</span>
               </li>
             </ol>
-          </div>
+          </motion.div>
 
-          <div className="rounded-xl border border-surface-container-high bg-surface-container-lowest p-6">
+          <motion.div variants={staggerItem} className="rounded-xl border border-surface-container-high bg-surface-container-lowest p-6">
             <p className="font-mono text-code-inline uppercase tracking-widest text-on-surface-variant">
               honest limits
             </p>
@@ -129,9 +140,9 @@ function Security() {
               <li>A recipient can always copy or screenshot what they see.</li>
               <li>E2EE protects content, not connection metadata.</li>
             </ul>
-          </div>
+          </motion.div>
         </div>
-      </div>
+      </motion.div>
     </SectionShell>
   )
 }

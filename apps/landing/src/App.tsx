@@ -7,7 +7,7 @@ import TitleBand from './components/title_band'
 
 function App() {
   return (
-    <div className="flex min-h-screen flex-col bg-background font-sans text-on-surface">
+    <div className="relative isolate flex min-h-screen flex-col bg-background font-sans text-on-surface">
       <Nav />
       <main>
         <Hero />

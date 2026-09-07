@@ -1,3 +1,7 @@
+import { motion } from 'framer-motion'
+
+import HandshakeDiagram from './handshake_diagram'
+import { staggerContainer, staggerItem } from '../lib/anim'
 import SectionShell from './section_shell'
 
 const steps = [
@@ -24,12 +28,24 @@ function How() {
     <SectionShell
       id="how"
       eyebrow="How it works"
-      title="A room, not a mailbox."
+      title="A room, not a server."
       lead="Ash uses a server for exactly one job: introducing peers. Once the direct connection exists, the server never touches your conversation again."
     >
-      <ol className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high md:grid-cols-2 xl:grid-cols-4">
+      <HandshakeDiagram />
+
+      <motion.ol
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high md:grid-cols-2 xl:grid-cols-4"
+      >
         {steps.map((step, index) => (
-          <li key={step.title} className="flex flex-col gap-3 bg-surface-container-lowest p-6">
+          <motion.li
+            key={step.title}
+            variants={staggerItem}
+            className="flex flex-col gap-3 bg-surface-container-lowest p-6"
+          >
             <span className="font-mono text-code-inline text-primary-container">
               0{index + 1}
             </span>
@@ -39,9 +55,9 @@ function How() {
             <p className="font-sans text-body-sm leading-relaxed text-on-surface-variant">
               {step.body}
             </p>
-          </li>
+          </motion.li>
         ))}
-      </ol>
+      </motion.ol>
     </SectionShell>
   )
 }

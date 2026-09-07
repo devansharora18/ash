@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion'
 import { ArrowUpRight, ShieldCheck } from 'lucide-react'
 
 const links = [
@@ -18,7 +19,11 @@ function Nav() {
           <span className="font-sans text-headline-md font-semibold lowercase tracking-tight text-on-surface">
             ash
           </span>
-          <span className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container" />
+          <motion.span
+            className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
+            animate={{ opacity: [0.5, 1, 0.5] }}
+            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+          />
         </a>
 
         <div className="hidden items-center gap-1 md:flex">

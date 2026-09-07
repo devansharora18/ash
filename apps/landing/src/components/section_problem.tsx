@@ -1,5 +1,7 @@
+import { motion } from 'framer-motion'
 import { Database, History, UserX } from 'lucide-react'
 
+import { staggerContainer, staggerItem } from '../lib/anim'
 import SectionShell from './section_shell'
 
 const problems = [
@@ -28,10 +30,17 @@ function Problem() {
       title="Traditional chat assumes a permanent record."
       lead="Convenience features — accounts, history, sync, search — are built on persistent infrastructure that owns your words."
     >
-      <div className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3">
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, margin: '-80px' }}
+        className="grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3"
+      >
         {problems.map(({ icon: Icon, title, body }) => (
-          <div
+          <motion.div
             key={title}
+            variants={staggerItem}
             className="flex flex-col gap-4 bg-surface-container-lowest p-6"
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
@@ -43,9 +52,9 @@ function Problem() {
             <p className="font-sans text-body-sm leading-relaxed text-on-surface-variant">
               {body}
             </p>
-          </div>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </SectionShell>
   )
 }
