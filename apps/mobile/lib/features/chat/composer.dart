@@ -252,7 +252,7 @@ class _ComposerState extends State<Composer> {
               decoration: InputDecoration(
                 isDense: true,
                 border: InputBorder.none,
-                hintText: 'Write a message...',
+                hintText: 'Write an encrypted message...',
                 hintStyle: AshText.bodyMd(AshColors.outline),
               ),
             ),

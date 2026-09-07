@@ -41,7 +41,7 @@ class GuaranteesCard extends StatelessWidget {
                 color: AshColors.tint,
                 title: 'Direct WebRTC P2P Mesh',
                 body:
-                    'Encrypted via Noise Protocol Handshake. Messages travel strictly peer-to-peer without central transit.',
+                    'Encrypted end-to-end with ECDH P-256 + AES-256-GCM session keys. Messages travel strictly peer-to-peer without central transit.',
               ),
               const _Divider(),
               const _GuaranteeItem(
@@ -49,7 +49,7 @@ class GuaranteesCard extends StatelessWidget {
                 color: AshColors.primary,
                 title: 'Zero Server-Side State',
                 body:
-                    'Ephemeral symmetric keys reside strictly in browser RAM and are never written to IndexedDB or localStorage.',
+                    'Content exists only in memory during a session. The device E2EE keypair is stored on your device and its private key never leaves it.',
               ),
               const _Divider(),
               const _GuaranteeItem(

@@ -140,7 +140,7 @@ class ChannelBar extends StatelessWidget {
                   const SizedBox(width: 6),
                   Text(
                     peerCount > 0
-                        ? 'WebRTC DataChannel direct'
+                        ? 'WebRTC E2EE · AES-256-GCM · direct'
                         : 'Connected · waiting for a peer to connect',
                     style: AshText.codeSm(AshColors.onSurfaceVariant),
                   ),
