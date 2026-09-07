@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../services/rtc_mesh.dart';
@@ -108,7 +109,11 @@ class _ChatScreenState extends State<ChatScreen> {
   final List<BoardStroke> _strokes = [];
   List<BoardStroke> get _strokesRef => _strokes;
   String? _activeStrokeId;
-  bool _boardView = false;
+  String _view = 'feed';
+
+  bool _sharingScreen = false;
+  MediaStream? _localShareStream;
+  final Map<String, MediaStream> _remoteScreens = {};
 
   String _newStrokeId() {
     final rand = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
@@ -145,6 +150,15 @@ class _ChatScreenState extends State<ChatScreen> {
           if (connected && _strokes.isNotEmpty) {
             _mesh?.sendBoardSync(peerId, _strokesRef);
           }
+          if (connected && _sharingScreen) {
+            unawaited(_mesh?.attachScreenShare(peerId));
+          }
+        }
+        ..onRemoteStream = (peerId, stream) {
+          setState(() => _remoteScreens[peerId] = stream);
+        }
+        ..onRemoteStreamEnd = (peerId) {
+          setState(() => _remoteScreens.remove(peerId));
         }
         ..onBoard = (from, event) {
           switch (event['type']) {
@@ -465,6 +479,32 @@ class _ChatScreenState extends State<ChatScreen> {
     _mesh?.broadcastBoard({'type': 'clear'});
   }
 
+  Future<void> _toggleScreenShare() async {
+    if (_sharingScreen) {
+      await _mesh?.stopScreenShare();
+      setState(() {
+        _sharingScreen = false;
+        _localShareStream = null;
+      });
+      return;
+    }
+    try {
+      final stream = await navigator.mediaDevices.getDisplayMedia({'video': true, 'audio': true});
+      await _mesh?.startScreenShare(stream);
+      setState(() {
+        _sharingScreen = true;
+        _localShareStream = stream;
+        _view = 'screen';
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Screen capture is unavailable here.')),
+        );
+      }
+    }
+  }
+
   Future<void> _playVoice(_ChatMessage message, String key) async {
     final bytes = message.voiceBytes;
     if (bytes == null) return;
@@ -487,7 +527,33 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _confirmLeave() async {
+  Widget _buildScreenView() {
+  final sources = <({String label, MediaStream stream})>[
+    if (_localShareStream != null)
+      (label: '${widget.displayName} (you)', stream: _localShareStream!),
+    for (final e in _remoteScreens.entries) (label: e.key, stream: e.value),
+  ];
+  if (sources.isEmpty) {
+    return Center(
+      child: Text(
+        'No screens to show.\nTap the share icon to broadcast yours.',
+        textAlign: TextAlign.center,
+        style: AshText.bodyMd(AshColors.outline),
+      ),
+    );
+  }
+  return ListView(
+    padding: const EdgeInsets.all(12),
+    children: [
+      for (final source in sources) ...[
+        _StreamVideo(label: source.label, stream: source.stream),
+        const SizedBox(height: 12),
+      ],
+    ],
+  );
+}
+
+Future<void> _confirmLeave() async {
     final leave = await showDialog<bool>(
       context: context,
       barrierColor: AshColors.surfaceContainerLowest.withValues(alpha: 0.8),
@@ -504,6 +570,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _sub?.cancel();
     unawaited(_mesh?.close());
+    for (final t in _localShareStream?.getTracks() ?? const <MediaStreamTrack>[]) {
+      unawaited(t.stop());
+    }
     _signaling?.close();
     _scrollController.dispose();
     _player.dispose();
@@ -576,25 +645,46 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       _ViewPill(
                         label: 'Feed',
-                        active: !_boardView,
-                        onTap: () => setState(() => _boardView = false),
+                        active: _view == 'feed',
+                        onTap: () => setState(() => _view = 'feed'),
                       ),
                       const SizedBox(width: 8),
                       _ViewPill(
                         label: 'Board',
-                        active: _boardView,
-                        onTap: () => setState(() => _boardView = true),
+                        active: _view == 'board',
+                        onTap: () => setState(() => _view = 'board'),
+                      ),
+                      const SizedBox(width: 8),
+                      _ViewPill(
+                        label: 'Screen',
+                        active: _view == 'screen',
+                        onTap: () => setState(() => _view = 'screen'),
                       ),
                       const Spacer(),
-                      Icon(
-                        _boardView ? Icons.gesture : Icons.chat_bubble_outline,
-                        size: 18,
-                        color: AshColors.outline,
+                      Material(
+                        color: _sharingScreen
+                            ? AshColors.error.withValues(alpha: 0.18)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(8),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(8),
+                          onTap: _toggleScreenShare,
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: Icon(
+                              Icons.screen_share,
+                              size: 20,
+                              color: _sharingScreen
+                                  ? AshColors.error
+                                  : AshColors.outline,
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                if (_boardView)
+                if (_view == 'board')
                   Expanded(
                     child: Whiteboard(
                       strokes: _strokes,
@@ -604,6 +694,8 @@ class _ChatScreenState extends State<ChatScreen> {
                       onClear: _boardClear,
                     ),
                   )
+                else if (_view == 'screen')
+                  Expanded(child: _buildScreenView())
                 else
                   Expanded(
                     child: ListView(
@@ -650,7 +742,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       ],
                     ),
                   ),
-                if (!_boardView)
+                if (_view == 'feed')
                   Composer(
                     onSend: _sendMessage,
                     onAttach: _pickFile,
@@ -661,6 +753,57 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _StreamVideo extends StatefulWidget {
+  const _StreamVideo({required this.label, required this.stream});
+
+  final String label;
+  final MediaStream stream;
+
+  @override
+  State<_StreamVideo> createState() => _StreamVideoState();
+}
+
+class _StreamVideoState extends State<_StreamVideo> {
+  final RTCVideoRenderer _renderer = RTCVideoRenderer();
+
+  @override
+  void initState() {
+    super.initState();
+    _renderer.initialize();
+    _renderer.srcObject = widget.stream;
+  }
+
+  @override
+  void dispose() {
+    _renderer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Screen · ${widget.label}',
+          style: AshText.codeSm(AshColors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 220,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AshColors.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: RTCVideoView(_renderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain),
+        ),
+      ],
     );
   }
 }

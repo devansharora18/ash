@@ -66,6 +66,8 @@ class RtcMeshCallbacks {
   void Function(String from, String name, Uint8List bytes, int durationSec)?
       onVoice;
   void Function(String from, Map<String, dynamic> event)? onBoard;
+  void Function(String from, MediaStream stream)? onRemoteStream;
+  void Function(String from)? onRemoteStreamEnd;
 }
 
 class _PeerConn {
@@ -95,6 +97,8 @@ class _PeerConn {
 
   Map<String, dynamic>? pendingOffer;
 
+  final List<RTCRtpSender> shareSenders = [];
+
   bool get sending => outBytes != null;
   bool get receiving => inId != null;
 }
@@ -114,6 +118,7 @@ class RtcMesh {
   final List<Map<String, dynamic>>? iceServers;
 
   final Map<String, _PeerConn> _conns = {};
+  MediaStream? _shareStream;
 
   Future<void> addPeer(String peerId) async {
     if (_conns.containsKey(peerId)) return;
@@ -125,6 +130,13 @@ class RtcMesh {
     final conn = _PeerConn(pc);
     _conns[peerId] = conn;
     _bindIce(peerId, pc);
+    pc.onTrack = (event) {
+      final streams = event.streams;
+      if (streams.isNotEmpty) {
+        callbacks.onRemoteStream?.call(peerId, streams.first);
+      }
+      event.track.onEnded = () => callbacks.onRemoteStreamEnd?.call(peerId);
+    };
     pc.onDataChannel = (channel) => _attachChannel(peerId, channel);
     if (selfId.compareTo(peerId) < 0) {
       final channel = await pc.createDataChannel('chat', RTCDataChannelInit());
@@ -577,10 +589,49 @@ class RtcMesh {
   }
 
   Future<void> close() async {
+    await stopScreenShare();
     for (final conn in _conns.values) {
       await conn.pc.close();
       conn.pc.dispose();
     }
     _conns.clear();
+  }
+
+  /// Start broadcasting a screen/display stream to every connected peer.
+  Future<void> startScreenShare(MediaStream stream) async {
+    _shareStream = stream;
+    for (final peerId in _conns.keys) {
+      await attachScreenShare(peerId);
+    }
+  }
+
+  /// Add the active share stream to one peer and renegotiate (late join).
+  Future<void> attachScreenShare(String peerId) async {
+    final conn = _conns[peerId];
+    final stream = _shareStream;
+    if (conn == null || conn.shareSenders.isNotEmpty || stream == null) return;
+    for (final track in stream.getTracks()) {
+      final sender = await conn.pc.addTrack(track, stream);
+      conn.shareSenders.add(sender);
+    }
+    await _negotiateOffer(peerId);
+  }
+
+  /// Stop sharing and renegotiate the tracks away from every peer.
+  Future<void> stopScreenShare() async {
+    final stream = _shareStream;
+    _shareStream = null;
+    for (final entry in _conns.entries) {
+      final conn = entry.value;
+      final had = conn.shareSenders.isNotEmpty;
+      for (final sender in conn.shareSenders) {
+        await conn.pc.removeTrack(sender);
+      }
+      conn.shareSenders.clear();
+      if (had) await _negotiateOffer(entry.key);
+    }
+    for (final track in stream?.getTracks() ?? const <MediaStreamTrack>[]) {
+      await track.stop();
+    }
   }
 }
