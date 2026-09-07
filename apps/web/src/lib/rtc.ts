@@ -56,7 +56,7 @@ export interface FileProgress {
 interface OutgoingFile {
   id: string
   name: string
-  bytes: ArrayBuffer
+  file: File
   seq: number
 }
 
@@ -73,7 +73,7 @@ export interface MeshCallbacks {
   onConnectionChange: (peerId: string, connected: boolean) => void
   onFileOffer: (from: string, offer: FileOffer) => void
   onFileProgress: (from: string, progress: FileProgress) => void
-  onFileComplete: (from: string, name: string, bytes: ArrayBuffer) => void
+  onFileComplete: (from: string, name: string, blob: Blob) => void
   onFileCancelled: (from: string) => void
 }
 
@@ -235,22 +235,22 @@ export class RtcMesh {
   // --- File transfer (peer-to-peer over the DataChannel) ---
 
   /** Propose a file to one peer. The peer must accept before chunks flow. */
-  sendFile(peerId: string, name: string, mime: string, bytes: ArrayBuffer): boolean {
+  sendFile(peerId: string, file: File): boolean {
     const conn = this.conns.get(peerId)
     const channel = conn?.channel
     if (!conn || !channel || channel.readyState !== 'open' || conn.outgoing) {
       return false
     }
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    conn.outgoing = { id, name, bytes, seq: 0 }
+    conn.outgoing = { id, name: file.name, file, seq: 0 }
     channel.send(
       JSON.stringify({
         kind: 'file',
         action: 'offer',
         id,
-        name,
-        size: bytes.byteLength,
-        mime,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
       }),
     )
     return true
@@ -342,22 +342,23 @@ export class RtcMesh {
     if (!out) return
     const CHUNK = 16384
     const backpressure = 1 << 21 // ~2MB queued before we wait
-    while (out.seq < out.bytes.byteLength) {
+    while (out.seq < out.file.size) {
       if (conn.outgoing !== out) break // cancelled
       while (channel.bufferedAmount > backpressure) {
         await sleep(25)
         if (channel.readyState !== 'open') break
       }
       if (channel.readyState !== 'open') break
-      const end = Math.min(out.bytes.byteLength, out.seq + CHUNK)
-      channel.send(out.bytes.slice(out.seq, end))
+      const end = Math.min(out.file.size, out.seq + CHUNK)
+      const chunk = await out.file.slice(out.seq, end).arrayBuffer()
+      channel.send(chunk)
       out.seq = end
       this.emitProgress(
         peerId,
         conn,
         out.id,
         out.name,
-        out.bytes.byteLength,
+        out.file.size,
         out.seq,
         'send',
       )
@@ -368,8 +369,8 @@ export class RtcMesh {
       conn,
       out.id,
       out.name,
-      out.bytes.byteLength,
-      out.bytes.byteLength,
+      out.file.size,
+      out.file.size,
       'send',
       true,
     )
@@ -392,10 +393,10 @@ export class RtcMesh {
     }
   }
 
-  private async handleFileChunk(
+  private handleFileChunk(
     peerId: string,
     data: ArrayBuffer | ArrayBufferView,
-  ): Promise<void> {
+  ): void {
     const conn = this.conns.get(peerId)
     const inc = conn?.incoming
     if (!conn || !inc) return
@@ -425,11 +426,10 @@ export class RtcMesh {
       const name = inc.name
       const size = inc.size
       const id = inc.id
+      const parts = inc.parts
       conn.incoming = null
-      const blob = new Blob(inc.parts)
-      const bytes = await blob.arrayBuffer()
       this.callbacks.onFileProgress(peerId, { id, name, size, sent: size, direction: 'receive' })
-      this.callbacks.onFileComplete(peerId, name, bytes)
+      this.callbacks.onFileComplete(peerId, name, new Blob(parts))
     }
   }
 

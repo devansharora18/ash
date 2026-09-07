@@ -35,13 +35,13 @@ function nowTime() {
     .join(':')
 }
 
-function downloadBlob(name: string, bytes: ArrayBuffer): void {
-  const url = URL.createObjectURL(new Blob([bytes]))
+function downloadBlob(name: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = name
   a.click()
-  URL.revokeObjectURL(url)
+  window.setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 function formatSize(bytes: number): string {
@@ -146,8 +146,8 @@ function ChatPage({
         onFileProgress: (from, progress) => {
           applyProgress(from, progress)
         },
-        onFileComplete: (from, name, bytes) => {
-          downloadBlob(name, bytes)
+        onFileComplete: (from, name, blob) => {
+          downloadBlob(name, blob)
           setTransfers((prev) => prev.filter((t) => t.peerId !== from))
           setToast(`Received ${name} from ${from}`)
         },
@@ -256,8 +256,7 @@ function ChatPage({
 
   const sendFileTo = async (peerId: string) => {
     if (!sendFile) return
-    const bytes = await sendFile.arrayBuffer()
-    meshRef.current?.sendFile(peerId, sendFile.name, sendFile.type, bytes)
+    meshRef.current?.sendFile(peerId, sendFile)
     setSendFile(null)
   }
 
