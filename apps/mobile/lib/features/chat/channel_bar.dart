@@ -4,8 +4,17 @@ import '../../theme.dart';
 import '../../widgets/pulse_dot.dart';
 
 class ChannelBar extends StatelessWidget {
-  const ChannelBar({super.key, required this.onLeave});
+  const ChannelBar({
+    super.key,
+    required this.roomId,
+    required this.peerCount,
+    required this.connected,
+    required this.onLeave,
+  });
 
+  final String roomId;
+  final int peerCount;
+  final bool connected;
   final VoidCallback onLeave;
 
   @override
@@ -30,7 +39,8 @@ class ChannelBar extends StatelessWidget {
                     color: AshColors.surfaceContainerHighest,
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  child: const Icon(Icons.lock, size: 18, color: AshColors.tint),
+                  child:
+                      const Icon(Icons.lock, size: 18, color: AshColors.tint),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -38,17 +48,21 @@ class ChannelBar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '#x9-k2m',
+                        '#${roomId.length > 8 ? roomId.substring(0, 8) : roomId}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AshText.codeMd(AshColors.onSurface)
                             .copyWith(fontWeight: FontWeight.w600),
                       ),
                       Text(
-                        'ed25519::p2p',
+                        connected ? 'webrtc::direct' : 'connecting...',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AshText.codeSm(AshColors.outline),
+                        style: AshText.codeSm(
+                          connected
+                              ? AshColors.tint
+                              : AshColors.outline,
+                        ),
                       ),
                     ],
                   ),
@@ -64,7 +78,10 @@ class ChannelBar extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const PulseDot(color: AshColors.tint, size: 6),
+                      PulseDot(
+                        color: connected ? AshColors.tint : AshColors.outline,
+                        size: 6,
+                      ),
                       const SizedBox(width: 6),
                       const Icon(
                         Icons.group,
@@ -73,7 +90,7 @@ class ChannelBar extends StatelessWidget {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '3 peers',
+                        '$peerCount peers',
                         style: AshText.codeSm(
                           AshColors.onSurface,
                           weight: FontWeight.w500,
@@ -122,7 +139,9 @@ class ChannelBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 6),
                   Text(
-                    'All messages stored in volatile RAM only',
+                    peerCount > 0
+                        ? 'WebRTC DataChannel direct'
+                        : 'Connected · waiting for a peer to connect',
                     style: AshText.codeSm(AshColors.onSurfaceVariant),
                   ),
                 ],

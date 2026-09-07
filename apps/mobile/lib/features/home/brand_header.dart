@@ -4,7 +4,9 @@ import '../../theme.dart';
 import '../../widgets/pulse_dot.dart';
 
 class BrandHeader extends StatelessWidget {
-  const BrandHeader({super.key});
+  const BrandHeader({super.key, this.onSettings});
+
+  final VoidCallback? onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +32,26 @@ class BrandHeader extends StatelessWidget {
             child: Text('v1.0 p2p', style: AshText.codeSm(AshColors.outline)),
           ),
           const Spacer(),
-          const _RelayStatusPill(),
+          _RelayStatusPill(),
+          const SizedBox(width: 8),
+          if (onSettings != null)
+            Material(
+              color: AshColors.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: onSettings,
+                child: const SizedBox(
+                  width: 40,
+                  height: 40,
+                  child: Icon(
+                    Icons.settings_outlined,
+                    size: 20,
+                    color: AshColors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

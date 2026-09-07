@@ -1,4 +1,4 @@
-import { EyeOff, KeyRound, Shield, Terminal } from 'lucide-react'
+import { EyeOff, KeyRound, Settings, Shield, Terminal } from 'lucide-react'
 
 import RoomActionCard from './room_action_card'
 
@@ -18,12 +18,28 @@ const explainerItems = [
 ]
 
 interface HomePageProps {
-  onEnterChat: () => void
+  backendUrl: string
+  onCreateRoom: (roomId: string) => void
+  onJoinRoom: (roomId: string) => void
+  onOpenSettings: () => void
 }
 
-function HomePage({ onEnterChat }: HomePageProps) {
+function HomePage({
+  backendUrl,
+  onCreateRoom,
+  onJoinRoom,
+  onOpenSettings,
+}: HomePageProps) {
   return (
     <div className="relative flex min-h-[calc(100vh-8rem)] w-full flex-col items-center justify-center px-4 py-8">
+      <button
+        type="button"
+        onClick={onOpenSettings}
+        title="Settings"
+        className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
+      >
+        <Settings className="h-[18px] w-[18px]" />
+      </button>
       <div className="flex w-full max-w-[420px] flex-col items-center">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3.5 flex h-10 w-10 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
@@ -42,7 +58,11 @@ function HomePage({ onEnterChat }: HomePageProps) {
           </p>
         </div>
 
-        <RoomActionCard onEnterChat={onEnterChat} />
+        <RoomActionCard
+          backendUrl={backendUrl}
+          onCreateRoom={onCreateRoom}
+          onJoinRoom={onJoinRoom}
+        />
 
         <div className="mt-6 flex w-full flex-col gap-2.5 px-2">
           {explainerItems.map(({ icon: Icon, text }) => (

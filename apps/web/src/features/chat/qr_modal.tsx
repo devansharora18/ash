@@ -3,11 +3,14 @@ import { QrCode, X } from 'lucide-react'
 interface QrModalProps {
   open: boolean
   onClose: () => void
+  roomId: string
 }
 
-function QrModal({ open, onClose }: QrModalProps) {
+function QrModal({ open, onClose, roomId }: QrModalProps) {
+  const inviteLink = `${window.location.origin}/?room=${roomId}`
+
   const copyLink = () => {
-    void navigator.clipboard?.writeText(window.location.href)
+    void navigator.clipboard?.writeText(inviteLink)
   }
 
   if (!open) return null
@@ -35,8 +38,8 @@ function QrModal({ open, onClose }: QrModalProps) {
           <svg className="h-44 w-44 text-on-surface" fill="currentColor" viewBox="0 0 100 100">
             <path d="M10 10h30v30h-30z M15 15v20h20v-20z M20 20h10v10h-10z M60 10h30v30h-30z M65 15v20h20v-20z M70 20h10v10h-10z M10 60h30v30h-30z M15 65v20h20v-20z M20 70h10v10h-10z M45 10h10v10h-10z M45 25h10v15h-10z M10 45h15v10h-15z M30 45h15v10h-15z M50 45h20v10h-20z M75 45h15v15h-15z M60 65h10v10h-10z M75 65h15v25h-15z M45 65h10v25h-10z M60 80h10v10h-10z" />
           </svg>
-          <span className="mt-3 font-mono text-code-inline text-primary-fixed-dim">
-            ash://peer/join?token=ash-8492
+          <span className="mt-3 break-all px-2 text-center font-mono text-code-inline text-primary-fixed-dim">
+            {inviteLink}
           </span>
         </div>
 

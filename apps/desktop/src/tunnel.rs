@@ -137,7 +137,13 @@ pub async fn list(bin: &Path) -> Result<Vec<Tunnel>, String> {
     let out = run_cloudflared(bin, &["tunnel", "list", "--output", "json"])
         .await
         .map_err(|e| format!("tunnel list failed: {e}"))?;
-    serde_json::from_str(&out).map_err(|e| format!("parse tunnel list: {e}"))
+    // cloudflared prints JSON `null` (not `[]`) when there are no tunnels.
+    match serde_json::from_str::<Option<Vec<Tunnel>>>(&out)
+        .map_err(|e| format!("parse tunnel list: {e}"))?
+    {
+        Some(tunnels) => Ok(tunnels),
+        None => Ok(Vec::new()),
+    }
 }
 
 pub async fn ensure(bin: &Path, name: &str) -> Result<String, String> {
@@ -149,9 +155,31 @@ pub async fn ensure(bin: &Path, name: &str) -> Result<String, String> {
 }
 
 pub async fn route_dns(bin: &Path, name: &str, hostname: &str) -> Result<String, String> {
-    run_cloudflared(bin, &["tunnel", "route", "dns", name, hostname])
+    match run_cloudflared(bin, &["tunnel", "route", "dns", name, hostname]).await {
+        Ok(out) => Ok(out),
+        Err(e) => {
+            if e.to_ascii_lowercase()
+                .contains("record with that host already exists")
+            {
+                // A record exists but may point somewhere stale. Overwrite it
+                // with the CNAME for this tunnel so the hostname actually routes.
+                run_cloudflared(
+                    bin,
+                    &["tunnel", "route", "dns", "--overwrite-dns", name, hostname],
+                )
+                .await
+                .map_err(|e| format!("route dns failed: {e}"))
+            } else {
+                Err(format!("route dns failed: {e}"))
+            }
+        }
+    }
+}
+
+pub async fn delete(bin: &Path, name: &str) -> Result<String, String> {
+    run_cloudflared(bin, &["tunnel", "delete", "-f", name])
         .await
-        .map_err(|e| format!("route dns failed: {e}"))
+        .map_err(|e| format!("tunnel delete failed: {e}"))
 }
 
 pub async fn spawn_run(
@@ -200,5 +228,11 @@ mod tests {
         let tunnels: Vec<Tunnel> = serde_json::from_str(json).unwrap();
         assert_eq!(tunnels.len(), 1);
         assert_eq!(tunnels[0].name, "ash");
+    }
+
+    #[test]
+    fn parses_null_tunnel_list_as_empty() {
+        let tunnels: Option<Vec<Tunnel>> = serde_json::from_str("null").unwrap();
+        assert!(tunnels.is_none());
     }
 }

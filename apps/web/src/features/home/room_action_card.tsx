@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import {
   ArrowRight,
   CircleAlert,
@@ -7,31 +7,28 @@ import {
   Loader2,
 } from 'lucide-react'
 
-const CODE_ALPHABET = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+import { createRoom } from '../../lib/signaling'
 
 function sanitize(value: string) {
-  return value.replace(/[^a-zA-Z0-9-]/g, '').toUpperCase()
+  return value.replace(/\s+/g, '').trim()
 }
 
 interface RoomActionCardProps {
-  onEnterChat: () => void
+  backendUrl: string
+  onCreateRoom: (roomId: string) => void
+  onJoinRoom: (roomId: string) => void
 }
 
-function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
+function RoomActionCard({
+  backendUrl,
+  onCreateRoom,
+  onJoinRoom,
+}: RoomActionCardProps) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [joining, setJoining] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  const timerRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) window.clearTimeout(timerRef.current)
-    }
-  }, [])
-
-  const rawLength = code.replace(/-/g, '').length
 
   const handleInput = (event: ChangeEvent<HTMLInputElement>) => {
     setError(null)
@@ -42,41 +39,39 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
     setError(null)
     try {
       const text = await navigator.clipboard.readText()
-      if (text) setCode(sanitize(text).slice(0, 9))
+      if (text) setCode(sanitize(text))
     } catch {
       setError('Clipboard read permission denied')
     }
   }
 
+  const handleCreate = async () => {
+    if (creating) return
+    setCreating(true)
+    setError(null)
+    try {
+      const { roomId } = await createRoom(backendUrl)
+      onCreateRoom(roomId)
+    } catch {
+      setError(
+        `Could not reach the signaling server at ${backendUrl}. Check the backend URL in Settings.`,
+      )
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const handleJoin = () => {
-    const clean = code.replace(/[^a-zA-Z0-9]/g, '')
-    if (clean.length !== 6) {
-      setError('Enter a valid 6-character room code')
+    const clean = code.trim()
+    if (!/^[A-Za-z0-9_-]{4,64}$/.test(clean)) {
+      setError('Enter a valid room ID')
       inputRef.current?.focus()
       return
     }
     setError(null)
     setJoining(true)
-    timerRef.current = window.setTimeout(() => {
-      setJoining(false)
-      setError('Rendezvous peer negotiation failed. Room expired or offline.')
-    }, 1200)
-  }
-
-  const handleCreate = () => {
-    setCreating(true)
-    timerRef.current = window.setTimeout(() => {
-      let generated = ''
-      for (let i = 0; i < 6; i++) {
-        generated += CODE_ALPHABET.charAt(
-          Math.floor(Math.random() * CODE_ALPHABET.length),
-        )
-      }
-      setCode(`${generated.slice(0, 3)}-${generated.slice(3)}`)
-      setCreating(false)
-      setError(null)
-      onEnterChat()
-    }, 600)
+    setCode(clean)
+    onJoinRoom(clean)
   }
 
   return (
@@ -91,7 +86,7 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
           {creating ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Generating cryptographic seeds...</span>
+              <span>Creating room…</span>
             </>
           ) : (
             <>
@@ -102,10 +97,10 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
         </button>
         <div className="flex items-center justify-between px-1">
           <span className="font-mono text-code-inline text-on-surface-variant/80">
-            Entropy mode: Ed25519
+            Signaling: {backendUrl.replace(/^https?:\/\//, '')}
           </span>
           <span className="font-mono text-code-inline text-primary">
-            WebRTC direct
+            relay
           </span>
         </div>
       </div>
@@ -115,7 +110,7 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
           <div className="w-full border-t border-surface-container-high" />
         </div>
         <span className="relative bg-surface-container px-3 font-sans text-caption uppercase tracking-wider text-on-surface-variant">
-          or join with a code
+          or join with a room ID
         </span>
       </div>
 
@@ -126,16 +121,10 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
               htmlFor="room-code-input"
               className="font-sans text-caption font-medium text-on-surface-variant"
             >
-              Room Code
+              Room ID
             </label>
-            <span
-              className={`font-mono text-code-inline ${
-                rawLength > 0 && rawLength < 6
-                  ? 'text-primary'
-                  : 'text-on-surface-variant/60'
-              }`}
-            >
-              {rawLength}/6
+            <span className="font-mono text-code-inline text-on-surface-variant/60">
+              invite link or code
             </span>
           </div>
           <div className="relative flex items-center">
@@ -144,8 +133,8 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
               ref={inputRef}
               autoComplete="off"
               spellCheck={false}
-              maxLength={9}
-              placeholder="e.g. 8492-X9"
+              maxLength={64}
+              placeholder="e.g. 8oJtCvIROEw"
               value={code}
               onChange={handleInput}
               className={`h-10 w-full rounded-lg border bg-surface-container-lowest pl-3.5 pr-16 font-mono text-[13px] uppercase tracking-wider text-on-surface transition-colors duration-150 placeholder:text-on-surface-variant/40 focus:outline-none ${
@@ -165,9 +154,9 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
             </button>
           </div>
           {error && (
-            <div className="flex items-center gap-1.5 pt-1 text-error" role="alert">
-              <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-              <span className="font-sans text-caption">{error}</span>
+            <div className="flex items-start gap-1.5 pt-1 text-error" role="alert">
+              <CircleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span className="font-sans text-caption leading-snug">{error}</span>
             </div>
           )}
         </div>
@@ -180,7 +169,7 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
           {joining ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Resolving peer mesh...</span>
+              <span>Joining…</span>
             </>
           ) : (
             <>
@@ -194,9 +183,9 @@ function RoomActionCard({ onEnterChat }: RoomActionCardProps) {
       <div className="flex items-center justify-between border-t border-surface-container-high/60 pt-2 text-on-surface-variant">
         <div className="flex items-center gap-1.5">
           <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_6px] shadow-primary-container" />
-          <span className="font-mono text-code-inline">Mesh rendezvous ready</span>
+          <span className="font-mono text-code-inline">Signaling ready</span>
         </div>
-        <span className="font-mono text-code-inline">0 relays required</span>
+        <span className="font-mono text-code-inline">no accounts · no logs</span>
       </div>
     </div>
   )
