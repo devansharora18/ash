@@ -21,19 +21,29 @@ services:
 
   # Optional TURN/media relay for WebRTC across NATs (peers on different
   # networks). Needs 3478/tcp+udp open on the host, i.e. on a public IP — not
-  # behind the Cloudflare tunnel. Set TURN_REALM/TURN_USER/TURN_PASSWORD in .env.
+  # behind the Cloudflare tunnel. Configure TURN_REALM/TURN_USER/TURN_PASSWORD,
+  # and TURN_EXTERNAL_IP (its public IP) if the host is behind NAT. Enable TLS
+  # (turns://) by mounting certs and setting TURN_TLS_CERT/TURN_TLS_KEY.
   turn:
     image: coturn/coturn:latest
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - -n
-      - --realm=${TURN_REALM:-localhost}
-      - --user=${TURN_USER:-ash}:${TURN_PASSWORD:-ash}
-      - --listening-port=3478
-      - --min-port=49152
-      - --max-port=65535
-      - --no-tls
-      - --no-dtls
+      - |
+        set -e
+        ARGS="-n --lt-cred-mech --fingerprint --no-cli --log-file=stdout --realm=$$TURN_REALM --user=$$TURN_USER:$$TURN_PASSWORD --listening-port=3478 --min-port=49152 --max-port=65535"
+        if [ -n "$$TURN_EXTERNAL_IP" ]; then ARGS="$$ARGS --external-ip=$$TURN_EXTERNAL_IP"; fi
+        if [ -n "$$TURN_TLS_CERT" ] && [ -n "$$TURN_TLS_KEY" ]; then ARGS="$$ARGS --cert=$$TURN_TLS_CERT --pkey=$$TURN_TLS_KEY --tls-listening-port=5349"; fi
+        exec turnserver $$ARGS
+    environment:
+      TURN_REALM: ${TURN_REALM:-localhost}
+      TURN_USER: ${TURN_USER:-ash}
+      TURN_PASSWORD: ${TURN_PASSWORD:-change-me}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:-}
+      TURN_TLS_CERT: ${TURN_TLS_CERT:-}
+      TURN_TLS_KEY: ${TURN_TLS_KEY:-}
     ports:
       - "3478:3478/udp"
       - "3478:3478/tcp"
+      - "5349:5349/udp"
+      - "5349:5349/tcp"
     restart: unless-stopped
