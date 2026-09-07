@@ -86,7 +86,9 @@ class Signaling implements SignalClient {
 
   /// Creates a room on the signaling server and returns its id.
   static Future<String> createRoom(String backendUrl) async {
-    final res = await http.post(Uri.parse('$backendUrl/rooms'));
+    final res = await http
+        .post(Uri.parse('$backendUrl/rooms'))
+        .timeout(const Duration(seconds: 10));
     if (res.statusCode != 200) {
       throw Exception('create room failed: HTTP ${res.statusCode}');
     }

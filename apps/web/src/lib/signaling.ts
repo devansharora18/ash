@@ -18,15 +18,29 @@ export interface CreateRoomResult {
 export async function createRoom(
   backendUrl: string,
 ): Promise<CreateRoomResult> {
-  const res = await fetch(`${backendUrl}/rooms`, { method: 'POST' })
-  if (!res.ok) {
-    const detail = (await res.json().catch(() => null)) as
-      | { detail?: string }
-      | null
-    throw new Error(detail?.detail ?? `HTTP ${res.status}`)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
+  try {
+    const res = await fetch(`${backendUrl}/rooms`, {
+      method: 'POST',
+      signal: controller.signal,
+    })
+    if (!res.ok) {
+      const detail = (await res.json().catch(() => null)) as
+        | { detail?: string }
+        | null
+      throw new Error(detail?.detail ?? `HTTP ${res.status}`)
+    }
+    const body = (await res.json()) as { room_id: string; link: string }
+    return { roomId: body.room_id, link: body.link }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('Request timed out')
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
   }
-  const body = (await res.json()) as { room_id: string; link: string }
-  return { roomId: body.room_id, link: body.link }
 }
 
 function wsUrl(backendUrl: string, roomId: string, peerId: string): string {
