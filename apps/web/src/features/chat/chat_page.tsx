@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Send, X } from 'lucide-react'
+import { Send, Volume2, VolumeX, X } from 'lucide-react'
 
 import {
   RtcMesh,
@@ -97,6 +97,10 @@ function ChatPage({
   const [toast, setToast] = useState<string | null>(null)
   const [transfers, setTransfers] = useState<TransferItem[]>([])
   const [strokes, setStrokes] = useState<BoardStroke[]>([])
+  const [sharingScreen, setSharingScreen] = useState(false)
+  const [remoteScreens, setRemoteScreens] = useState<
+    { peerId: string; stream: MediaStream }[]
+  >([])
 
   const connectionRef = useRef<SignalingConnection | null>(null)
   const meshRef = useRef<RtcMesh | null>(null)
@@ -104,6 +108,7 @@ function ChatPage({
   const voiceUrlsRef = useRef<string[]>([])
   const activeStrokeRef = useRef<string | null>(null)
   const strokesRef = useRef<BoardStroke[]>([])
+  const sharingRef = useRef(false)
 
   useEffect(() => {
     strokesRef.current = strokes
@@ -152,8 +157,12 @@ function ChatPage({
         },
         onConnectionChange: (peerId, connected) => {
           setConnections((prev) => ({ ...prev, [peerId]: connected }))
-          if (connected && strokesRef.current.length > 0) {
+          if (!connected) return
+          if (strokesRef.current.length > 0) {
             meshRef.current?.sendBoardSync(peerId, strokesRef.current)
+          }
+          if (sharingRef.current) {
+            meshRef.current?.attachScreenShare(peerId)
           }
         },
         onFileOffer: (from, offer) => {
@@ -227,6 +236,19 @@ function ChatPage({
               })
               break
           }
+        },
+        onRemoteStream: (peerId, stream) => {
+          setRemoteScreens((prev) => {
+            const idx = prev.findIndex((s) => s.peerId === peerId)
+            if (idx === -1) return [...prev, { peerId, stream }]
+            const next = [...prev]
+            next[idx] = { peerId, stream }
+            return next
+          })
+          setView('chat')
+        },
+        onRemoteStreamEnd: (peerId) => {
+          setRemoteScreens((prev) => prev.filter((s) => s.peerId !== peerId))
         },
       },
       iceServers,
@@ -401,6 +423,36 @@ function ChatPage({
     meshRef.current?.broadcastBoard({ type: 'clear' })
   }
 
+  const toggleScreenShare = () => {
+    if (sharingScreen) {
+      meshRef.current?.stopScreenShare()
+      sharingRef.current = false
+      setSharingScreen(false)
+      return
+    }
+    void (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        })
+        meshRef.current?.startScreenShare(stream)
+        sharingRef.current = true
+        setSharingScreen(true)
+        const ended = () => {
+          meshRef.current?.stopScreenShare()
+          sharingRef.current = false
+          setSharingScreen(false)
+        }
+        for (const track of stream.getTracks()) {
+          track.addEventListener('ended', ended)
+        }
+      } catch {
+        // capture cancelled or denied
+      }
+    })()
+  }
+
   const handleConfirmIncinerate = () => {
     setIncinerateOpen(false)
     meshRef.current?.close()
@@ -454,6 +506,8 @@ function ChatPage({
               onStrokePoint={handleStrokePoint}
               onStrokeEnd={handleStrokeEnd}
               onBoardClear={handleBoardClear}
+              sharingScreen={sharingScreen}
+              onToggleScreenShare={toggleScreenShare}
             />
           </div>
         </main>
@@ -565,6 +619,22 @@ function ChatPage({
           })}
         </div>
       )}
+      {remoteScreens.length > 0 && (
+        <div className="fixed right-4 top-4 z-50 flex w-80 flex-col gap-3">
+          {remoteScreens.map(({ peerId, stream }) => (
+            <ScreenTile
+              key={peerId}
+              name={peerId}
+              stream={stream}
+              onClose={() =>
+                setRemoteScreens((prev) =>
+                  prev.filter((s) => s.peerId !== peerId),
+                )
+              }
+            />
+          ))}
+        </div>
+      )}
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-surface-container-high px-4 py-2 font-sans text-body-sm text-on-surface shadow-xl">
           {toast}
@@ -575,3 +645,57 @@ function ChatPage({
 }
 
 export default ChatPage
+
+interface ScreenTileProps {
+  name: string
+  stream: MediaStream
+  onClose: () => void
+}
+
+function ScreenTile({ name, stream, onClose }: ScreenTileProps) {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const [muted, setMuted] = useState(true)
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream
+  }, [stream])
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-lowest shadow-xl">
+      <div className="flex items-center justify-between px-3 py-2">
+        <span className="truncate font-sans text-body-sm-medium text-on-surface">
+          Screen · {name}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setMuted((m) => !m)}
+            title={muted ? 'Unmute' : 'Mute'}
+            className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
+          >
+            {muted ? (
+              <VolumeX className="h-4 w-4" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            title="Close screen share"
+            className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={muted}
+        className="aspect-video w-full bg-black"
+      />
+    </div>
+  )
+}

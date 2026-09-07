@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Flame, Lock, Maximize2, Minimize2 } from 'lucide-react'
+import { Flame, Lock, Maximize2, Minimize2, MonitorUp } from 'lucide-react'
 
 import Composer from './composer'
 import MessageFeed, { type ChatMessage } from './message_feed'
@@ -23,6 +23,8 @@ interface ChatWorkspaceProps {
   onStrokePoint: (x: number, y: number) => void
   onStrokeEnd: () => void
   onBoardClear: () => void
+  sharingScreen: boolean
+  onToggleScreenShare: () => void
 }
 
 const viewTabs: { key: ChatView; label: string }[] = [
@@ -88,6 +90,8 @@ function ChatWorkspace({
   onStrokePoint,
   onStrokeEnd,
   onBoardClear,
+  sharingScreen,
+  onToggleScreenShare,
 }: ChatWorkspaceProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [boardFullscreen, setBoardFullscreen] = useState(false)
@@ -140,6 +144,18 @@ function ChatWorkspace({
             ) : (
               <Maximize2 className="h-[18px] w-[18px]" />
             )}
+          </button>
+          <button
+            type="button"
+            title={sharingScreen ? 'Stop screen sharing' : 'Share your screen'}
+            onClick={onToggleScreenShare}
+            className={`rounded-lg p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-primary-container ${
+              sharingScreen
+                ? 'bg-primary-container/20 text-primary-fixed-dim'
+                : 'text-outline hover:bg-surface-container-low hover:text-on-surface'
+            }`}
+          >
+            <MonitorUp className="h-[18px] w-[18px]" />
           </button>
           <button
             type="button"

@@ -61,6 +61,7 @@ interface PeerConn {
   incoming: IncomingFile | null
   pendingOffer: FileOffer | null
   lastProgressEmit: number
+  shareSenders: RTCRtpSender[]
 }
 
 export interface FileOffer {
@@ -121,6 +122,8 @@ export interface MeshCallbacks {
   onFileCancelled: (from: string) => void
   onVoiceMessage: (from: string, blob: Blob, durationMs: number) => void
   onBoard: (from: string, event: BoardEvent) => void
+  onRemoteStream: (from: string, stream: MediaStream) => void
+  onRemoteStreamEnd: (from: string) => void
 }
 
 /**
@@ -136,6 +139,7 @@ export class RtcMesh {
   private sendSignal: SignalSender
   private callbacks: MeshCallbacks
   private iceServers: RTCIceServer[]
+  private shareStream: MediaStream | null = null
 
   constructor(
     selfId: string,
@@ -162,10 +166,18 @@ export class RtcMesh {
       incoming: null,
       pendingOffer: null,
       lastProgressEmit: 0,
+      shareSenders: [],
     }
     this.conns.set(peerId, conn)
     this.bindIce(peerId, pc)
     pc.ondatachannel = (event) => this.attachChannel(peerId, event.channel)
+    pc.ontrack = (event) => {
+      const stream = event.streams[0]
+      if (stream) this.callbacks.onRemoteStream(peerId, stream)
+      event.track.addEventListener('ended', () =>
+        this.callbacks.onRemoteStreamEnd(peerId),
+      )
+    }
 
     if (this.selfId < peerId) {
       this.attachChannel(peerId, pc.createDataChannel('chat'))
@@ -576,10 +588,51 @@ export class RtcMesh {
     return true
   }
 
+  /** Start broadcasting a screen/display stream to every connected peer. */
+  startScreenShare(stream: MediaStream): void {
+    this.shareStream = stream
+    for (const peerId of this.conns.keys()) {
+      this.attachScreenShare(peerId)
+    }
+  }
+
+  /** Add the active share stream to one peer and renegotiate (late join). */
+  attachScreenShare(peerId: string): void {
+    const conn = this.conns.get(peerId)
+    const stream = this.shareStream
+    if (!conn || conn.shareSenders.length > 0 || !stream) return
+    for (const track of stream.getTracks()) {
+      const sender = conn.pc.addTrack(track, stream)
+      if (sender) conn.shareSenders.push(sender)
+    }
+    void this.negotiateOffer(peerId)
+  }
+
+  /** Stop sharing and renegotiate the tracks away from every peer. */
+  stopScreenShare(): void {
+    const stream = this.shareStream
+    this.shareStream = null
+    for (const [peerId, conn] of this.conns) {
+      const had = conn.shareSenders.length > 0
+      for (const sender of conn.shareSenders) {
+        try {
+          conn.pc.removeTrack(sender)
+        } catch {
+          // ignore
+        }
+      }
+      conn.shareSenders = []
+      if (had) void this.negotiateOffer(peerId)
+    }
+    stream?.getTracks().forEach((track) => track.stop())
+  }
+
   close(): void {
     for (const conn of this.conns.values()) {
       conn.pc.close()
     }
     this.conns.clear()
+    this.shareStream?.getTracks().forEach((track) => track.stop())
+    this.shareStream = null
   }
 }
