@@ -48,10 +48,10 @@ function Problem() {
             <motion.div
               key={title}
               variants={staggerItem}
-              className="flex items-start gap-4 rounded-xl border border-surface-container-high bg-surface-container-lowest/70 p-5 backdrop-blur-sm"
+              className="flex items-start gap-4 rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 p-5 backdrop-blur-sm"
             >
               <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
-                <Icon className="h-4 w-4 text-error" />
+                <Icon className="h-4 w-4 text-primary-container" />
               </div>
               <div>
                 <h3 className="font-sans text-headline-sm font-semibold tracking-tight text-on-surface">

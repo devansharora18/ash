@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { ArrowRight } from 'lucide-react'
 
 import DissolveNetwork from './dissolve_network'
+import SplitFlapText from './split_flap_text'
 import { staggerContainer, staggerItem } from '../lib/anim'
 
 const claims = ['no accounts', 'no history', 'no logs', 'no central database']
@@ -36,6 +37,24 @@ function SectionCta() {
               Explore the source
               <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
             </a>
+          </motion.div>
+
+          <motion.div variants={staggerItem} className="w-full overflow-hidden">
+            <SplitFlapText
+              words={['NO ACCOUNTS', 'NO HISTORY', 'NO LOGS', 'NO CENTRAL DATABASE']}
+              cycleDelay={2200}
+              flipDuration={0.1}
+              stagger={0.05}
+              flipsPerChar={6}
+              charset="alphanumeric"
+              tileColor="#16161f"
+              textColor="#38bdf8"
+              tileRadius={6}
+              gap={5}
+              fontSize={34}
+              loop
+              padTo={19}
+            />
           </motion.div>
 
           <motion.ul variants={staggerItem} className="flex flex-wrap gap-x-6 gap-y-2">

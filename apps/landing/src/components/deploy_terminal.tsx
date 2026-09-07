@@ -28,7 +28,7 @@ function DeployTerminal() {
   return (
     <div
       ref={ref}
-      className="overflow-hidden rounded-2xl border border-surface-container-high bg-surface-container-lowest/80 shadow-[0_8px_32px] shadow-black/40 backdrop-blur-sm"
+      className="overflow-hidden rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 shadow-[0_8px_32px] shadow-black/40 backdrop-blur-sm"
     >
       <div className="flex items-center justify-between border-b border-surface-container-high bg-surface-container-low px-5 py-3">
         <div className="flex items-center gap-1.5">

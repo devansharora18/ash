@@ -22,7 +22,7 @@ function Hero() {
         variants={staggerContainer}
         initial="hidden"
         animate="visible"
-        className="mx-auto flex w-full max-w-6xl flex-col items-start gap-10 px-6 pb-24 pt-40 md:pt-48"
+        className="mx-auto flex w-full max-w-6xl flex-col items-start gap-8 px-6 pb-24 pt-36 md:pt-44"
       >
         <motion.div
           variants={staggerItem}

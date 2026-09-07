@@ -13,7 +13,7 @@ function LeaksDiagram() {
         <span className="font-mono text-code-inline uppercase tracking-[0.22em] text-on-surface-variant">
           message trail
         </span>
-        <span className="font-mono text-code-inline text-error">kept forever</span>
+        <span className="font-mono text-code-inline text-primary-container">kept forever</span>
       </div>
 
       <div className="relative flex items-center justify-between gap-4 px-8 pb-12 pt-10 sm:px-10">
@@ -66,8 +66,8 @@ function LeaksDiagram() {
 
         {/* database */}
         <div className="flex w-36 shrink-0 flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-error/40 bg-surface-container">
-            <Database className="h-6 w-6 text-error" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-primary-container/40 bg-surface-container">
+            <Database className="h-6 w-6 text-primary-container" />
           </div>
           <span className="font-mono text-code-inline text-on-surface-variant">database</span>
         </div>

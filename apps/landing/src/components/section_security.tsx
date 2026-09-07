@@ -49,7 +49,7 @@ function Security() {
           >
             <TopologyDiagram focus={focus} />
           </motion.div>
-          <div className="mt-4 grid gap-px overflow-hidden rounded-xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3">
+          <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3">
             {facts.map((fact) => (
               <div
                 key={fact.label}
@@ -79,7 +79,7 @@ function Security() {
 
           <motion.div
             variants={staggerItem}
-            className="rounded-xl border border-surface-container-high bg-surface-container-lowest/70 p-6 backdrop-blur-sm"
+            className="rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 p-6 backdrop-blur-sm"
           >
             <p className="font-mono text-code-inline uppercase tracking-widest text-on-surface-variant">
               honest limits
