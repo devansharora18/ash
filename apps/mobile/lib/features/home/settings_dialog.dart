@@ -54,9 +54,9 @@ class _SettingsDialogState extends State<SettingsDialog> {
       return;
     }
     if (turnUrl.isNotEmpty &&
-        !turnUrl.startsWith('turn://') &&
-        !turnUrl.startsWith('turns://')) {
-      setState(() => _error = 'TURN URL must start with turn:// or turns://');
+        !turnUrl.startsWith('turn:') &&
+        !turnUrl.startsWith('turns:')) {
+      setState(() => _error = 'TURN URL must start with turn: or turns:');
       return;
     }
     url = url.replaceAll(RegExp(r'/+$'), '');

@@ -28,8 +28,8 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
       setError('Backend URL must start with http:// or https://')
       return
     }
-    if (turnUrl.trim() && !/^(turn|turns):\/\//i.test(turnUrl.trim())) {
-      setError('TURN server URL must start with turn:// or turns://')
+    if (turnUrl.trim() && !/^(turn|turns):.+/i.test(turnUrl.trim())) {
+      setError('TURN server URL must start with turn: or turns:')
       return
     }
     onSave({
@@ -108,9 +108,23 @@ function SettingsModal({ settings, onSave, onClose }: SettingsModalProps) {
           </div>
 
           <div className="flex flex-col gap-2 rounded-lg border border-surface-container-high bg-surface-container-low p-3">
-            <div className="flex items-center gap-2 text-on-surface-variant">
-              <ToggleRight className="h-4 w-4" />
-              <span className={labelCls}>TURN server (optional)</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-on-surface-variant">
+                <ToggleRight className="h-4 w-4" />
+                <span className={labelCls}>TURN server (optional)</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setTurnUrl('turn:openrelay.metered.ca:80')
+                  setTurnUsername('openrelayproject')
+                  setTurnCredential('openrelayproject')
+                  setError(null)
+                }}
+                className="font-sans text-caption font-medium text-primary-fixed-dim transition-colors hover:text-primary-fixed"
+              >
+                Use OpenRelay (free)
+              </button>
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="settings-turn-url" className={labelCls}>
