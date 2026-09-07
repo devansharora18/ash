@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react'
-import { Flame, Lock } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Flame, Lock, Maximize2, Minimize2 } from 'lucide-react'
 
 import Composer from './composer'
 import MessageFeed, { type ChatMessage } from './message_feed'
+import Whiteboard, { type BoardStroke } from './whiteboard'
 
 export type ChatView = 'chat' | 'empty' | 'loading'
 
@@ -17,6 +18,11 @@ interface ChatWorkspaceProps {
   onFilePick: (file: File) => void
   onVoiceRecord: (blob: Blob, durationMs: number) => void
   onIncinerate: () => void
+  strokes: BoardStroke[]
+  onStrokeStart: (x: number, y: number, color: string, width: number) => void
+  onStrokePoint: (x: number, y: number) => void
+  onStrokeEnd: () => void
+  onBoardClear: () => void
 }
 
 const viewTabs: { key: ChatView; label: string }[] = [
@@ -77,8 +83,14 @@ function ChatWorkspace({
   onFilePick,
   onVoiceRecord,
   onIncinerate,
+  strokes,
+  onStrokeStart,
+  onStrokePoint,
+  onStrokeEnd,
+  onBoardClear,
 }: ChatWorkspaceProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
+  const [boardFullscreen, setBoardFullscreen] = useState(false)
 
   useEffect(() => {
     const el = viewportRef.current
@@ -119,6 +131,18 @@ function ChatWorkspace({
           </div>
           <button
             type="button"
+            title={boardFullscreen ? 'Split view with chat' : 'Fullscreen whiteboard'}
+            onClick={() => setBoardFullscreen((v) => !v)}
+            className="rounded-lg p-1.5 text-outline transition-colors hover:bg-surface-container-low hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary-container"
+          >
+            {boardFullscreen ? (
+              <Minimize2 className="h-[18px] w-[18px]" />
+            ) : (
+              <Maximize2 className="h-[18px] w-[18px]" />
+            )}
+          </button>
+          <button
+            type="button"
             title="Incinerate Session"
             onClick={onIncinerate}
             className="rounded-lg p-1.5 text-outline transition-colors hover:bg-surface-container-low hover:text-error focus-visible:outline-2 focus-visible:outline-primary-container"
@@ -128,30 +152,42 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <div
-        ref={viewportRef}
-        className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto px-6 py-6"
-      >
-        <div className="mx-auto flex w-full max-w-[760px] flex-col space-y-4">
-          {statusMessage && (
-            <div className="flex items-center gap-2 rounded-lg bg-surface-container-low px-3 py-2 font-sans text-caption text-on-surface-variant">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary-container" />
-              {statusMessage}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {!boardFullscreen && (
+          <div className="flex min-w-0 flex-1 flex-col border-r border-surface-container-high">
+            <div
+              ref={viewportRef}
+              className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto px-6 py-6"
+            >
+              <div className="mx-auto flex w-full max-w-[760px] flex-col space-y-4">
+                {statusMessage && (
+                  <div className="flex items-center gap-2 rounded-lg bg-surface-container-low px-3 py-2 font-sans text-caption text-on-surface-variant">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary-container" />
+                    {statusMessage}
+                  </div>
+                )}
+                {view === 'chat' && (
+                  <MessageFeed messages={messages} peersOnline={peersOnline} />
+                )}
+                {view === 'empty' && <EmptyState />}
+                {view === 'loading' && <Skeleton />}
+              </div>
             </div>
-          )}
-          {view === 'chat' && (
-            <MessageFeed messages={messages} peersOnline={peersOnline} />
-          )}
-          {view === 'empty' && <EmptyState />}
-          {view === 'loading' && <Skeleton />}
-        </div>
+            <Composer
+              onSend={onSend}
+              onFilePick={onFilePick}
+              onVoiceRecord={onVoiceRecord}
+            />
+          </div>
+        )}
+        <Whiteboard
+          strokes={strokes}
+          onStrokeStart={onStrokeStart}
+          onStrokePoint={onStrokePoint}
+          onStrokeEnd={onStrokeEnd}
+          onClear={onBoardClear}
+        />
       </div>
-
-      <Composer
-        onSend={onSend}
-        onFilePick={onFilePick}
-        onVoiceRecord={onVoiceRecord}
-      />
     </div>
   )
 }

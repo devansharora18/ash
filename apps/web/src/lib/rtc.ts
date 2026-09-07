@@ -78,6 +78,13 @@ export interface FileProgress {
   direction: 'send' | 'receive'
 }
 
+/** A normalized (0..1) whiteboard drawing event streamed between peers. */
+export type BoardEvent =
+  | { type: 'start'; id: string; color: string; width: number; x: number; y: number }
+  | { type: 'point'; id: string; x: number; y: number }
+  | { type: 'end'; id: string }
+  | { type: 'clear' }
+
 interface OutgoingFile {
   id: string
   name: string
@@ -105,6 +112,7 @@ export interface MeshCallbacks {
   onFileComplete: (from: string, name: string, blob: Blob) => void
   onFileCancelled: (from: string) => void
   onVoiceMessage: (from: string, blob: Blob, durationMs: number) => void
+  onBoard: (from: string, event: BoardEvent) => void
 }
 
 /**
@@ -202,6 +210,8 @@ export class RtcMesh {
             this.callbacks.onMessage(peerId, msg.text)
           } else if (msg.kind === 'file' || msg.kind === 'voice') {
             this.handleTransferControl(peerId, channel, msg)
+          } else if (msg.kind === 'board') {
+            this.callbacks.onBoard(peerId, msg as unknown as BoardEvent)
           }
         } catch {
           // ignore malformed frames
@@ -532,6 +542,16 @@ export class RtcMesh {
 
   broadcast(text: string): void {
     const payload = JSON.stringify({ kind: 'chat', text })
+    for (const conn of this.conns.values()) {
+      if (conn.channel && conn.channel.readyState === 'open') {
+        conn.channel.send(payload)
+      }
+    }
+  }
+
+  /** Stream a whiteboard drawing event to every connected peer. */
+  broadcastBoard(event: BoardEvent): void {
+    const payload = JSON.stringify({ kind: 'board', ...event })
     for (const conn of this.conns.values()) {
       if (conn.channel && conn.channel.readyState === 'open') {
         conn.channel.send(payload)

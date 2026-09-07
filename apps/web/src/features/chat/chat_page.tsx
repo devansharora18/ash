@@ -15,6 +15,7 @@ import { type ChatMessage } from './message_feed'
 import NavSidebar from './nav_sidebar'
 import QrModal from './qr_modal'
 import RoomSidebar from './room_sidebar'
+import type { BoardStroke } from './whiteboard'
 
 type ConnectionStatus =
   | { kind: 'connecting' }
@@ -91,11 +92,13 @@ function ChatPage({
   const [sendFile, setSendFile] = useState<File | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const [transfers, setTransfers] = useState<TransferItem[]>([])
+  const [strokes, setStrokes] = useState<BoardStroke[]>([])
 
   const connectionRef = useRef<SignalingConnection | null>(null)
   const meshRef = useRef<RtcMesh | null>(null)
   const idRef = useRef(1)
   const voiceUrlsRef = useRef<string[]>([])
+  const activeStrokeRef = useRef<string | null>(null)
 
   const applyProgress = (from: string, progress: FileProgress) => {
     setTransfers((prev) => {
@@ -171,6 +174,36 @@ function ChatPage({
             },
           ])
           setView('chat')
+        },
+        onBoard: (from, event) => {
+          void from
+          switch (event.type) {
+            case 'start':
+              setStrokes((prev) => [
+                ...prev,
+                {
+                  id: event.id,
+                  color: event.color,
+                  width: event.width,
+                  points: [{ x: event.x, y: event.y }],
+                },
+              ])
+              break
+            case 'point':
+              setStrokes((prev) =>
+                prev.map((s) =>
+                  s.id === event.id
+                    ? { ...s, points: [...s.points, { x: event.x, y: event.y }] }
+                    : s,
+                ),
+              )
+              break
+            case 'end':
+              break
+            case 'clear':
+              setStrokes([])
+              break
+          }
         },
       },
       iceServers,
@@ -310,6 +343,41 @@ function ChatPage({
     setIncomingFile(null)
   }
 
+  const boardNewId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
+  const handleStrokeStart = (x: number, y: number, color: string, width: number) => {
+    const id = boardNewId()
+    activeStrokeRef.current = id
+    setStrokes((prev) => [...prev, { id, color, width, points: [{ x, y }] }])
+    meshRef.current?.broadcastBoard({ type: 'start', id, color, width, x, y })
+  }
+
+  const handleStrokePoint = (x: number, y: number) => {
+    const id = activeStrokeRef.current
+    if (!id) return
+    setStrokes((prev) =>
+      prev.map((s) =>
+        s.id === id ? { ...s, points: [...s.points, { x, y }] } : s,
+      ),
+    )
+    meshRef.current?.broadcastBoard({ type: 'point', id, x, y })
+  }
+
+  const handleStrokeEnd = () => {
+    const id = activeStrokeRef.current
+    if (!id) return
+    activeStrokeRef.current = null
+    meshRef.current?.broadcastBoard({ type: 'end', id })
+  }
+
+  const handleBoardClear = () => {
+    setStrokes([])
+    meshRef.current?.broadcastBoard({ type: 'clear' })
+  }
+
   const handleConfirmIncinerate = () => {
     setIncinerateOpen(false)
     meshRef.current?.close()
@@ -358,6 +426,11 @@ function ChatPage({
               onFilePick={handleFilePick}
               onVoiceRecord={handleVoiceRecord}
               onIncinerate={() => setIncinerateOpen(true)}
+              strokes={strokes}
+              onStrokeStart={handleStrokeStart}
+              onStrokePoint={handleStrokePoint}
+              onStrokeEnd={handleStrokeEnd}
+              onBoardClear={handleBoardClear}
             />
           </div>
         </main>
