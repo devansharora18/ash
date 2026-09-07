@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ash_mobile/features/chat/chat_screen.dart';
 import 'package:ash_mobile/services/signaling.dart';
 import 'package:ash_mobile/theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeSignalClient implements SignalClient {
   final _ctrl = StreamController<SignalEvent>();
@@ -34,6 +35,10 @@ Widget _wrap() => MaterialApp(
     );
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('chat screen renders and sends a message', (WidgetTester tester) async {
     await tester.pumpWidget(_wrap());
     await tester.pump();
