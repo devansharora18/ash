@@ -14,6 +14,7 @@ interface ChatWorkspaceProps {
   peersOnline: number
   statusMessage: string | null
   onSend: (text: string) => void
+  onFilePick: (file: File) => void
   onIncinerate: () => void
 }
 
@@ -72,6 +73,7 @@ function ChatWorkspace({
   peersOnline,
   statusMessage,
   onSend,
+  onFilePick,
   onIncinerate,
 }: ChatWorkspaceProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -143,7 +145,7 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <Composer onSend={onSend} />
+      <Composer onSend={onSend} onFilePick={onFilePick} />
     </div>
   )
 }

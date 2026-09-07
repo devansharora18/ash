@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { Send, X } from 'lucide-react'
 
-import { RtcMesh } from '../../lib/rtc'
+import { RtcMesh, type FileOffer } from '../../lib/rtc'
 import {
   connectSignaling,
   type ServerMessage,
@@ -8,6 +9,7 @@ import {
 } from '../../lib/signaling'
 import ChatTopbar from './chat_topbar'
 import ChatWorkspace, { type ChatView } from './chat_workspace'
+import FileReceiveModal from './file_receive_modal'
 import IncinerateModal from './incinerate_modal'
 import { type ChatMessage } from './message_feed'
 import NavSidebar from './nav_sidebar'
@@ -33,6 +35,27 @@ function nowTime() {
     .join(':')
 }
 
+function downloadBlob(name: string, bytes: ArrayBuffer): void {
+  const url = URL.createObjectURL(new Blob([bytes]))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${bytes} B`
+}
+
+interface IncomingPending {
+  from: string
+  offer: FileOffer
+}
+
 interface ChatPageProps {
   displayName: string
   backendUrl: string
@@ -55,6 +78,9 @@ function ChatPage({
   const [status, setStatus] = useState<ConnectionStatus>({ kind: 'connecting' })
   const [qrOpen, setQrOpen] = useState(false)
   const [incinerateOpen, setIncinerateOpen] = useState(false)
+  const [incomingFile, setIncomingFile] = useState<IncomingPending | null>(null)
+  const [sendFile, setSendFile] = useState<File | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const connectionRef = useRef<SignalingConnection | null>(null)
   const meshRef = useRef<RtcMesh | null>(null)
@@ -79,6 +105,17 @@ function ChatPage({
         },
         onConnectionChange: (peerId, connected) => {
           setConnections((prev) => ({ ...prev, [peerId]: connected }))
+        },
+        onFileOffer: (from, offer) => {
+          setIncomingFile({ from, offer })
+        },
+        onFileComplete: (from, name, bytes) => {
+          downloadBlob(name, bytes)
+          setToast(`Received ${name} from ${from}`)
+        },
+        onFileCancelled: (from) => {
+          setIncomingFile((prev) => (prev?.from === from ? null : prev))
+          setToast(`File transfer with ${from} cancelled`)
         },
       },
       iceServers,
@@ -161,6 +198,35 @@ function ChatPage({
     setView('chat')
   }
 
+  useEffect(() => {
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), 3000)
+    return () => window.clearTimeout(t)
+  }, [toast])
+
+  const handleFilePick = (file: File) => {
+    setSendFile(file)
+  }
+
+  const sendFileTo = async (peerId: string) => {
+    if (!sendFile) return
+    const bytes = await sendFile.arrayBuffer()
+    meshRef.current?.sendFile(peerId, sendFile.name, sendFile.type, bytes)
+    setSendFile(null)
+  }
+
+  const acceptIncoming = () => {
+    if (!incomingFile) return
+    meshRef.current?.acceptFile(incomingFile.from, incomingFile.offer.id)
+    setIncomingFile(null)
+  }
+
+  const declineIncoming = () => {
+    if (!incomingFile) return
+    meshRef.current?.declineFile(incomingFile.from, incomingFile.offer.id)
+    setIncomingFile(null)
+  }
+
   const handleConfirmIncinerate = () => {
     setIncinerateOpen(false)
     meshRef.current?.close()
@@ -204,6 +270,7 @@ function ChatPage({
                     : null
               }
               onSend={handleSend}
+              onFilePick={handleFilePick}
               onIncinerate={() => setIncinerateOpen(true)}
             />
           </div>
@@ -219,6 +286,67 @@ function ChatPage({
         onCancel={() => setIncinerateOpen(false)}
         onConfirm={handleConfirmIncinerate}
       />
+      {incomingFile && (
+        <FileReceiveModal
+          from={incomingFile.from}
+          offer={incomingFile.offer}
+          onAccept={acceptIncoming}
+          onDecline={declineIncoming}
+        />
+      )}
+      {sendFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-[420px] space-y-3 rounded-xl bg-surface-container-lowest p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <h3 className="font-sans text-headline-md font-medium text-on-surface">
+                Send file
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSendFile(null)}
+                className="p-1 text-outline transition-colors hover:text-on-surface"
+              >
+                <span className="sr-only">Close</span>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <p className="truncate font-sans text-body-sm text-on-surface">
+              {sendFile.name}
+              <span className="text-on-surface-variant">
+                {' '}· {formatSize(sendFile.size)}
+              </span>
+            </p>
+            <p className="font-sans text-caption text-on-surface-variant">
+              Choose a connected peer to receive it:
+            </p>
+            <div className="space-y-1.5">
+              {peers.filter((id) => connections[id]).length === 0 && (
+                <p className="rounded-lg bg-surface-container-low px-3 py-2 font-sans text-caption text-outline">
+                  No peers connected yet.
+                </p>
+              )}
+              {peers
+                .filter((id) => connections[id])
+                .map((peerId) => (
+                  <button
+                    key={peerId}
+                    type="button"
+                    onClick={() => void sendFileTo(peerId)}
+                    className="flex w-full items-center justify-between rounded-lg bg-surface-container-low px-3 py-2 font-sans text-body-sm text-on-surface transition-colors hover:bg-surface-container-high focus-visible:outline-2 focus-visible:outline-primary-container"
+                  >
+                    <span>{peerId}</span>
+                    <Send className="h-4 w-4 text-on-surface-variant" />
+                  </button>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-surface-container-high px-4 py-2 font-sans text-body-sm text-on-surface shadow-xl">
+          {toast}
+        </div>
+      )}
     </>
   )
 }

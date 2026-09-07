@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
-import { Send } from 'lucide-react'
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react'
+import { Paperclip, Send } from 'lucide-react'
 
 interface ComposerProps {
   onSend: (text: string) => void
+  onFilePick: (file: File) => void
 }
 
-function Composer({ onSend }: ComposerProps) {
+function Composer({ onSend, onFilePick }: ComposerProps) {
   const [value, setValue] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const resize = () => {
     const el = textareaRef.current
@@ -34,11 +36,31 @@ function Composer({ onSend }: ComposerProps) {
     }
   }
 
+  const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) onFilePick(file)
+  }
+
   return (
     <div className="shrink-0 bg-surface-container-lowest p-4">
       <div className="mx-auto w-full max-w-[760px]">
         <div className="rounded-xl bg-surface-container-low p-2.5 shadow-sm transition-all focus-within:ring-1 focus-within:ring-primary-container">
           <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileInput}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              title="Send a file"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary-container"
+            >
+              <Paperclip className="h-[18px] w-[18px]" />
+            </button>
             <textarea
               ref={textareaRef}
               rows={1}
@@ -63,7 +85,7 @@ function Composer({ onSend }: ComposerProps) {
           <div className="flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-primary-container" />
             <span className="font-mono text-code-inline text-on-surface-variant">
-              RAM-only buffer
+              P2P file transfer · WebRTC
             </span>
           </div>
         </div>

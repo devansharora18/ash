@@ -30,11 +30,38 @@ interface PeerConn {
   connected: boolean
   remoteSet: boolean
   queuedCandidates: RTCIceCandidateInit[]
+  outgoing: OutgoingFile | null
+  incoming: IncomingFile | null
+  pendingOffer: FileOffer | null
+}
+
+export interface FileOffer {
+  id: string
+  name: string
+  size: number
+  mime: string
+}
+
+interface OutgoingFile {
+  id: string
+  bytes: ArrayBuffer
+  seq: number
+}
+
+interface IncomingFile {
+  id: string
+  name: string
+  size: number
+  parts: ArrayBuffer[]
+  received: number
 }
 
 export interface MeshCallbacks {
   onMessage: (from: string, text: string) => void
   onConnectionChange: (peerId: string, connected: boolean) => void
+  onFileOffer: (from: string, offer: FileOffer) => void
+  onFileComplete: (from: string, name: string, bytes: ArrayBuffer) => void
+  onFileCancelled: (from: string) => void
 }
 
 /**
@@ -72,6 +99,9 @@ export class RtcMesh {
       connected: false,
       remoteSet: false,
       queuedCandidates: [],
+      outgoing: null,
+      incoming: null,
+      pendingOffer: null,
     }
     this.conns.set(peerId, conn)
     this.bindIce(peerId, pc)
@@ -116,16 +146,24 @@ export class RtcMesh {
     channel.onopen = () => this.callbacks.onConnectionChange(peerId, true)
     channel.onclose = () => this.callbacks.onConnectionChange(peerId, false)
     channel.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data as string) as {
-          kind?: string
-          text?: string
+      const data = event.data
+      if (typeof data === 'string') {
+        try {
+          const msg = JSON.parse(data) as {
+            kind?: string
+            text?: string
+            action?: string
+          }
+          if (msg.kind === 'chat' && typeof msg.text === 'string') {
+            this.callbacks.onMessage(peerId, msg.text)
+          } else if (msg.kind === 'file') {
+            this.handleFileControl(peerId, channel, msg)
+          }
+        } catch {
+          // ignore malformed frames
         }
-        if (data.kind === 'chat' && typeof data.text === 'string') {
-          this.callbacks.onMessage(peerId, data.text)
-        }
-      } catch {
-        // ignore malformed frames
+      } else {
+        void this.handleFileChunk(peerId, data)
       }
     }
   }
@@ -177,6 +215,148 @@ export class RtcMesh {
       } catch {
         // ignore invalid/duplicate candidates
       }
+    }
+  }
+
+  // --- File transfer (peer-to-peer over the DataChannel) ---
+
+  /** Propose a file to one peer. The peer must accept before chunks flow. */
+  sendFile(peerId: string, name: string, mime: string, bytes: ArrayBuffer): boolean {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (!conn || !channel || channel.readyState !== 'open' || conn.outgoing) {
+      return false
+    }
+    const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+    conn.outgoing = { id, bytes, seq: 0 }
+    channel.send(
+      JSON.stringify({
+        kind: 'file',
+        action: 'offer',
+        id,
+        name,
+        size: bytes.byteLength,
+        mime,
+      }),
+    )
+    return true
+  }
+
+  acceptFile(peerId: string, id: string): void {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (!conn || !channel) return
+    if (conn.pendingOffer?.id === id) {
+      conn.incoming = {
+        id,
+        name: conn.pendingOffer.name,
+        size: conn.pendingOffer.size,
+        parts: [],
+        received: 0,
+      }
+      conn.pendingOffer = null
+    }
+    channel.send(JSON.stringify({ kind: 'file', action: 'accept', id }))
+  }
+
+  declineFile(peerId: string, id: string): void {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (!conn || !channel) return
+    if (conn.pendingOffer?.id === id) conn.pendingOffer = null
+    channel.send(JSON.stringify({ kind: 'file', action: 'decline', id }))
+  }
+
+  cancelFile(peerId: string, id: string): void {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (conn) {
+      if (conn.outgoing?.id === id) conn.outgoing = null
+      if (conn.incoming?.id === id) conn.incoming = null
+      if (conn.pendingOffer?.id === id) conn.pendingOffer = null
+    }
+    if (channel) {
+      channel.send(JSON.stringify({ kind: 'file', action: 'cancel', id }))
+    }
+  }
+
+  private handleFileControl(
+    peerId: string,
+    channel: RTCDataChannel,
+    msg: { action?: string; id?: string; name?: string; size?: number; mime?: string },
+  ): void {
+    const conn = this.conns.get(peerId)
+    if (!conn) return
+    switch (msg.action) {
+      case 'offer':
+        if (typeof msg.id === 'string' && !conn.pendingOffer && !conn.incoming) {
+          conn.pendingOffer = {
+            id: msg.id,
+            name: msg.name ?? 'file',
+            size: msg.size ?? 0,
+            mime: msg.mime ?? '',
+          }
+          this.callbacks.onFileOffer(peerId, conn.pendingOffer)
+        } else {
+          channel.send(JSON.stringify({ kind: 'file', action: 'decline', id: msg.id }))
+        }
+        break
+      case 'accept':
+        if (conn.outgoing && conn.outgoing.id === msg.id) {
+          this.pumpChunks(conn, channel)
+        }
+        break
+      case 'decline':
+        if (conn.outgoing?.id === msg.id) conn.outgoing = null
+        this.callbacks.onFileCancelled(peerId)
+        break
+      case 'cancel':
+        if (conn.outgoing?.id === msg.id) conn.outgoing = null
+        if (conn.incoming?.id === msg.id) conn.incoming = null
+        if (conn.pendingOffer?.id === msg.id) conn.pendingOffer = null
+        this.callbacks.onFileCancelled(peerId)
+        break
+    }
+  }
+
+  private pumpChunks(conn: PeerConn, channel: RTCDataChannel): void {
+    const out = conn.outgoing
+    if (!out) return
+    const CHUNK = 16384
+    while (out.seq < out.bytes.byteLength) {
+      const end = Math.min(out.bytes.byteLength, out.seq + CHUNK)
+      channel.send(out.bytes.slice(out.seq, end))
+      out.seq = end
+    }
+    conn.outgoing = null
+  }
+
+  private async handleFileChunk(
+    peerId: string,
+    data: ArrayBuffer | ArrayBufferView,
+  ): Promise<void> {
+    const conn = this.conns.get(peerId)
+    const inc = conn?.incoming
+    if (!conn || !inc) return
+    const chunk: ArrayBuffer =
+      data instanceof ArrayBuffer
+        ? data
+        : (() => {
+            const view = data as ArrayBufferView
+            const buf = new ArrayBuffer(view.byteLength)
+            new Uint8Array(buf).set(
+              new Uint8Array(view.buffer, view.byteOffset, view.byteLength),
+            )
+            return buf
+          })()
+    inc.parts.push(chunk)
+    inc.received += chunk.byteLength
+    if (inc.received >= inc.size) {
+      const name = inc.name
+      conn.incoming = null
+      const blob = new Blob(inc.parts)
+      const bytes = await blob.arrayBuffer()
+      this.callbacks.onFileComplete(peerId, name, bytes)
     }
   }
 
