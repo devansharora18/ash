@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import SiteFooter from './components/site_footer'
 import SiteHeader from './components/site_header'
@@ -20,10 +20,21 @@ function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [iceServers, setIceServers] = useState<RTCIceServer[]>([])
+  const [iceLoading, setIceLoading] = useState(true)
 
-  const enterChat = async (id: string) => {
-    const servers = await resolveIceServers(settings)
-    setIceServers(servers)
+  useEffect(() => {
+    let alive = true
+    void resolveIceServers(settings).then((servers) => {
+      if (!alive) return
+      setIceServers(servers)
+      setIceLoading(false)
+    })
+    return () => {
+      alive = false
+    }
+  }, [settings])
+
+  const enterChat = (id: string) => {
     setRoomId(id)
     setPage('chat')
   }
@@ -40,6 +51,15 @@ function App() {
   }
 
   if (page === 'chat' && roomId) {
+    if (iceLoading) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-surface-container-lowest">
+          <span className="font-sans text-body-sm text-outline">
+            Preparing secure channel…
+          </span>
+        </div>
+      )
+    }
     return (
       <ChatPage
         displayName={settings.displayName}
