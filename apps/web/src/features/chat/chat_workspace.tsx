@@ -15,6 +15,7 @@ interface ChatWorkspaceProps {
   statusMessage: string | null
   onSend: (text: string) => void
   onFilePick: (file: File) => void
+  onVoiceRecord: (blob: Blob, durationMs: number) => void
   onIncinerate: () => void
 }
 
@@ -74,6 +75,7 @@ function ChatWorkspace({
   statusMessage,
   onSend,
   onFilePick,
+  onVoiceRecord,
   onIncinerate,
 }: ChatWorkspaceProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -145,7 +147,11 @@ function ChatWorkspace({
         </div>
       </div>
 
-      <Composer onSend={onSend} onFilePick={onFilePick} />
+      <Composer
+        onSend={onSend}
+        onFilePick={onFilePick}
+        onVoiceRecord={onVoiceRecord}
+      />
     </div>
   )
 }

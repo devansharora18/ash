@@ -95,6 +95,7 @@ function ChatPage({
   const connectionRef = useRef<SignalingConnection | null>(null)
   const meshRef = useRef<RtcMesh | null>(null)
   const idRef = useRef(1)
+  const voiceUrlsRef = useRef<string[]>([])
 
   const applyProgress = (from: string, progress: FileProgress) => {
     setTransfers((prev) => {
@@ -157,9 +158,19 @@ function ChatPage({
           setToast(`File transfer with ${from} cancelled`)
         },
         onVoiceMessage: (from, blob, durationMs) => {
-          void from
-          void blob
-          void durationMs
+          const url = URL.createObjectURL(blob)
+          voiceUrlsRef.current.push(url)
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: idRef.current++,
+              author: from,
+              time: nowTime(),
+              self: false,
+              voice: { url, durationMs },
+            },
+          ])
+          setView('chat')
         },
       },
       iceServers,
@@ -252,6 +263,28 @@ function ChatPage({
     setSendFile(file)
   }
 
+  const handleVoiceRecord = (blob: Blob, durationMs: number) => {
+    const url = URL.createObjectURL(blob)
+    voiceUrlsRef.current.push(url)
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: idRef.current++,
+        author: displayName,
+        time: nowTime(),
+        self: true,
+        voice: { url, durationMs },
+      },
+    ])
+    const targets = Object.entries(connections)
+      .filter(([, connected]) => connected)
+      .map(([peerId]) => peerId)
+    for (const peerId of targets) {
+      meshRef.current?.sendVoice(peerId, blob, durationMs)
+    }
+    setView('chat')
+  }
+
   const cancelTransfer = (t: TransferItem) => {
     meshRef.current?.cancelFile(t.peerId, t.id)
     setTransfers((prev) =>
@@ -285,6 +318,8 @@ function ChatPage({
     setMessages([])
     setPeers([])
     setConnections({})
+    for (const url of voiceUrlsRef.current) URL.revokeObjectURL(url)
+    voiceUrlsRef.current = []
     onLeave()
   }
 
@@ -321,6 +356,7 @@ function ChatPage({
               }
               onSend={handleSend}
               onFilePick={handleFilePick}
+              onVoiceRecord={handleVoiceRecord}
               onIncinerate={() => setIncinerateOpen(true)}
             />
           </div>
