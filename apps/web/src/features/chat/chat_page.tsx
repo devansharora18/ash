@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, X } from 'lucide-react'
 
-import { RtcMesh, type FileOffer } from '../../lib/rtc'
+import { RtcMesh, type FileOffer, type FileProgress } from '../../lib/rtc'
 import {
   connectSignaling,
   type ServerMessage,
@@ -56,6 +56,15 @@ interface IncomingPending {
   offer: FileOffer
 }
 
+interface TransferItem {
+  peerId: string
+  id: string
+  name: string
+  size: number
+  sent: number
+  direction: 'send' | 'receive'
+}
+
 interface ChatPageProps {
   displayName: string
   backendUrl: string
@@ -81,10 +90,35 @@ function ChatPage({
   const [incomingFile, setIncomingFile] = useState<IncomingPending | null>(null)
   const [sendFile, setSendFile] = useState<File | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [transfers, setTransfers] = useState<TransferItem[]>([])
 
   const connectionRef = useRef<SignalingConnection | null>(null)
   const meshRef = useRef<RtcMesh | null>(null)
   const idRef = useRef(1)
+
+  const applyProgress = (from: string, progress: FileProgress) => {
+    setTransfers((prev) => {
+      const idx = prev.findIndex(
+        (t) => t.peerId === from && t.id === progress.id,
+      )
+      if (idx === -1) {
+        return [
+          ...prev,
+          {
+            peerId: from,
+            id: progress.id,
+            name: progress.name,
+            size: progress.size,
+            sent: progress.sent,
+            direction: progress.direction,
+          },
+        ]
+      }
+      const next = [...prev]
+      next[idx] = { ...next[idx], sent: progress.sent }
+      return next
+    })
+  }
 
   useEffect(() => {
     const mesh = new RtcMesh(
@@ -109,12 +143,17 @@ function ChatPage({
         onFileOffer: (from, offer) => {
           setIncomingFile({ from, offer })
         },
+        onFileProgress: (from, progress) => {
+          applyProgress(from, progress)
+        },
         onFileComplete: (from, name, bytes) => {
           downloadBlob(name, bytes)
+          setTransfers((prev) => prev.filter((t) => t.peerId !== from))
           setToast(`Received ${name} from ${from}`)
         },
         onFileCancelled: (from) => {
           setIncomingFile((prev) => (prev?.from === from ? null : prev))
+          setTransfers((prev) => prev.filter((t) => t.peerId !== from))
           setToast(`File transfer with ${from} cancelled`)
         },
       },
@@ -206,6 +245,13 @@ function ChatPage({
 
   const handleFilePick = (file: File) => {
     setSendFile(file)
+  }
+
+  const cancelTransfer = (t: TransferItem) => {
+    meshRef.current?.cancelFile(t.peerId, t.id)
+    setTransfers((prev) =>
+      prev.filter((x) => !(x.peerId === t.peerId && x.id === t.id)),
+    )
   }
 
   const sendFileTo = async (peerId: string) => {
@@ -340,6 +386,47 @@ function ChatPage({
                 ))}
             </div>
           </div>
+        </div>
+      )}
+      {transfers.length > 0 && (
+        <div className="fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2">
+          {transfers.map((t) => {
+            const pct = t.size > 0 ? Math.min(100, Math.round((t.sent / t.size) * 100)) : 0
+            return (
+              <div
+                key={`${t.peerId}-${t.id}`}
+                className="rounded-xl border border-surface-container-high bg-surface-container-lowest p-3 shadow-xl"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate font-sans text-body-sm-medium text-on-surface">
+                    {t.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => cancelTransfer(t)}
+                    title="Cancel"
+                    className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-container-high">
+                  <div
+                    className="h-full rounded-full bg-primary-container transition-[width] duration-200"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <div className="mt-1 flex items-center justify-between font-mono text-code-inline text-on-surface-variant">
+                  <span>
+                    {t.direction === 'send' ? 'Sending' : 'Receiving'} · {pct}%
+                  </span>
+                  <span>
+                    {formatSize(Math.min(t.sent, t.size))} / {formatSize(t.size)}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
       {toast && (

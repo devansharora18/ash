@@ -6,6 +6,8 @@ const STUN_SERVERS: RTCIceServer[] = [
 
 export type SignalSender = (to: string, data: unknown) => void
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
 /** Build the ICE server list: always the STUN fallback, plus optional TURN. */
 export function buildIceServers(settings: Settings): RTCIceServer[] {
   const servers: RTCIceServer[] = [...STUN_SERVERS]
@@ -33,6 +35,7 @@ interface PeerConn {
   outgoing: OutgoingFile | null
   incoming: IncomingFile | null
   pendingOffer: FileOffer | null
+  lastProgressEmit: number
 }
 
 export interface FileOffer {
@@ -42,8 +45,17 @@ export interface FileOffer {
   mime: string
 }
 
+export interface FileProgress {
+  id: string
+  name: string
+  size: number
+  sent: number
+  direction: 'send' | 'receive'
+}
+
 interface OutgoingFile {
   id: string
+  name: string
   bytes: ArrayBuffer
   seq: number
 }
@@ -60,6 +72,7 @@ export interface MeshCallbacks {
   onMessage: (from: string, text: string) => void
   onConnectionChange: (peerId: string, connected: boolean) => void
   onFileOffer: (from: string, offer: FileOffer) => void
+  onFileProgress: (from: string, progress: FileProgress) => void
   onFileComplete: (from: string, name: string, bytes: ArrayBuffer) => void
   onFileCancelled: (from: string) => void
 }
@@ -102,6 +115,7 @@ export class RtcMesh {
       outgoing: null,
       incoming: null,
       pendingOffer: null,
+      lastProgressEmit: 0,
     }
     this.conns.set(peerId, conn)
     this.bindIce(peerId, pc)
@@ -228,7 +242,7 @@ export class RtcMesh {
       return false
     }
     const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
-    conn.outgoing = { id, bytes, seq: 0 }
+    conn.outgoing = { id, name, bytes, seq: 0 }
     channel.send(
       JSON.stringify({
         kind: 'file',
@@ -303,7 +317,7 @@ export class RtcMesh {
         break
       case 'accept':
         if (conn.outgoing && conn.outgoing.id === msg.id) {
-          this.pumpChunks(conn, channel)
+          void this.pumpChunks(peerId, conn, channel)
         }
         break
       case 'decline':
@@ -319,16 +333,63 @@ export class RtcMesh {
     }
   }
 
-  private pumpChunks(conn: PeerConn, channel: RTCDataChannel): void {
+  private async pumpChunks(
+    peerId: string,
+    conn: PeerConn,
+    channel: RTCDataChannel,
+  ): Promise<void> {
     const out = conn.outgoing
     if (!out) return
     const CHUNK = 16384
+    const backpressure = 1 << 21 // ~2MB queued before we wait
     while (out.seq < out.bytes.byteLength) {
+      if (conn.outgoing !== out) break // cancelled
+      while (channel.bufferedAmount > backpressure) {
+        await sleep(25)
+        if (channel.readyState !== 'open') break
+      }
+      if (channel.readyState !== 'open') break
       const end = Math.min(out.bytes.byteLength, out.seq + CHUNK)
       channel.send(out.bytes.slice(out.seq, end))
       out.seq = end
+      this.emitProgress(
+        peerId,
+        conn,
+        out.id,
+        out.name,
+        out.bytes.byteLength,
+        out.seq,
+        'send',
+      )
     }
     conn.outgoing = null
+    this.emitProgress(
+      peerId,
+      conn,
+      out.id,
+      out.name,
+      out.bytes.byteLength,
+      out.bytes.byteLength,
+      'send',
+      true,
+    )
+  }
+
+  private emitProgress(
+    peerId: string,
+    conn: PeerConn,
+    id: string,
+    name: string,
+    size: number,
+    sent: number,
+    direction: 'send' | 'receive',
+    force = false,
+  ): void {
+    const now = Date.now()
+    if (force || sent >= size || now - conn.lastProgressEmit > 250) {
+      conn.lastProgressEmit = now
+      this.callbacks.onFileProgress(peerId, { id, name, size, sent, direction })
+    }
   }
 
   private async handleFileChunk(
@@ -351,11 +412,23 @@ export class RtcMesh {
           })()
     inc.parts.push(chunk)
     inc.received += chunk.byteLength
+    this.emitProgress(
+      peerId,
+      conn,
+      inc.id,
+      inc.name,
+      inc.size,
+      inc.received,
+      'receive',
+    )
     if (inc.received >= inc.size) {
       const name = inc.name
+      const size = inc.size
+      const id = inc.id
       conn.incoming = null
       const blob = new Blob(inc.parts)
       const bytes = await blob.arrayBuffer()
+      this.callbacks.onFileProgress(peerId, { id, name, size, sent: size, direction: 'receive' })
       this.callbacks.onFileComplete(peerId, name, bytes)
     }
   }
