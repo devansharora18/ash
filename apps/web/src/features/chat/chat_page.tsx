@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Send, X } from 'lucide-react'
 
-import { RtcMesh, type FileOffer, type FileProgress } from '../../lib/rtc'
+import {
+  RtcMesh,
+  type BoardStroke,
+  type FileOffer,
+  type FileProgress,
+} from '../../lib/rtc'
 import {
   connectSignaling,
   type ServerMessage,
@@ -15,7 +20,6 @@ import { type ChatMessage } from './message_feed'
 import NavSidebar from './nav_sidebar'
 import QrModal from './qr_modal'
 import RoomSidebar from './room_sidebar'
-import type { BoardStroke } from './whiteboard'
 
 type ConnectionStatus =
   | { kind: 'connecting' }
@@ -99,6 +103,11 @@ function ChatPage({
   const idRef = useRef(1)
   const voiceUrlsRef = useRef<string[]>([])
   const activeStrokeRef = useRef<string | null>(null)
+  const strokesRef = useRef<BoardStroke[]>([])
+
+  useEffect(() => {
+    strokesRef.current = strokes
+  }, [strokes])
 
   const applyProgress = (from: string, progress: FileProgress) => {
     setTransfers((prev) => {
@@ -143,6 +152,9 @@ function ChatPage({
         },
         onConnectionChange: (peerId, connected) => {
           setConnections((prev) => ({ ...prev, [peerId]: connected }))
+          if (connected && strokesRef.current.length > 0) {
+            meshRef.current?.sendBoardSync(peerId, strokesRef.current)
+          }
         },
         onFileOffer: (from, offer) => {
           setIncomingFile({ from, offer })
@@ -179,15 +191,19 @@ function ChatPage({
           void from
           switch (event.type) {
             case 'start':
-              setStrokes((prev) => [
-                ...prev,
-                {
-                  id: event.id,
-                  color: event.color,
-                  width: event.width,
-                  points: [{ x: event.x, y: event.y }],
-                },
-              ])
+              setStrokes((prev) =>
+                prev.some((s) => s.id === event.id)
+                  ? prev
+                  : [
+                      ...prev,
+                      {
+                        id: event.id,
+                        color: event.color,
+                        width: event.width,
+                        points: [{ x: event.x, y: event.y }],
+                      },
+                    ],
+              )
               break
             case 'point':
               setStrokes((prev) =>
@@ -202,6 +218,13 @@ function ChatPage({
               break
             case 'clear':
               setStrokes([])
+              break
+            case 'sync':
+              setStrokes((prev) => {
+                const seen = new Set(prev.map((s) => s.id))
+                const fresh = event.strokes.filter((s) => !seen.has(s.id))
+                return fresh.length ? [...prev, ...fresh] : prev
+              })
               break
           }
         },

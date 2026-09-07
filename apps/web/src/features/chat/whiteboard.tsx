@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Eraser, PenLine, Users } from 'lucide-react'
 
-export interface BoardStroke {
-  id: string
-  color: string
-  width: number
-  points: { x: number; y: number }[]
-}
+import type { BoardStroke } from '../../lib/rtc'
+
+export type { BoardStroke }
 
 const PALETTE = [
   '#00d9ff',

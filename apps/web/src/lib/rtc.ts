@@ -78,12 +78,20 @@ export interface FileProgress {
   direction: 'send' | 'receive'
 }
 
+export interface BoardStroke {
+  id: string
+  color: string
+  width: number
+  points: { x: number; y: number }[]
+}
+
 /** A normalized (0..1) whiteboard drawing event streamed between peers. */
 export type BoardEvent =
   | { type: 'start'; id: string; color: string; width: number; x: number; y: number }
   | { type: 'point'; id: string; x: number; y: number }
   | { type: 'end'; id: string }
   | { type: 'clear' }
+  | { type: 'sync'; strokes: BoardStroke[] }
 
 interface OutgoingFile {
   id: string
@@ -557,6 +565,15 @@ export class RtcMesh {
         conn.channel.send(payload)
       }
     }
+  }
+
+  /** Send the full board state to one peer (late-join sync over its channel). */
+  sendBoardSync(peerId: string, strokes: BoardStroke[]): boolean {
+    const conn = this.conns.get(peerId)
+    const channel = conn?.channel
+    if (!conn || !channel || channel.readyState !== 'open') return false
+    channel.send(JSON.stringify({ kind: 'board', type: 'sync', strokes }))
+    return true
   }
 
   close(): void {
