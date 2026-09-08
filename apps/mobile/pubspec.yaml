@@ -41,7 +41,7 @@ dependencies:
   flutter_webrtc: ^1.6.1
   file_picker: ^8.1.4
   path_provider: ^2.1.5
-  record: ^5.1.2
+  record: ^7.1.1
   audioplayers: ^6.0.0
   pointycastle: ^3.9.1
 
