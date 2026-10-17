@@ -6,11 +6,7 @@ import MessageFeed, { type ChatMessage } from './message_feed'
 import ShareView, { type ShareSource } from './share_view'
 import Whiteboard, { type BoardStroke } from './whiteboard'
 
-export type ChatView = 'chat' | 'empty' | 'loading'
-
 interface ChatWorkspaceProps {
-  view: ChatView
-  onViewChange: (view: ChatView) => void
   roomId: string
   messages: ChatMessage[]
   peersOnline: number
@@ -29,56 +25,7 @@ interface ChatWorkspaceProps {
   shareSources: ShareSource[]
 }
 
-const viewTabs: { key: ChatView; label: string }[] = [
-  { key: 'chat', label: 'Feed' },
-  { key: 'empty', label: 'Empty' },
-  { key: 'loading', label: 'Skeleton' },
-]
-
-function EmptyState() {
-  return (
-    <div className="flex flex-col items-center justify-center space-y-3 py-16 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-surface-container-low">
-        <Lock className="h-6 w-6 text-outline" />
-      </div>
-      <div className="space-y-1">
-        <h2 className="font-sans text-headline-md font-medium text-on-surface">
-          Session Initialized
-        </h2>
-        <p className="max-w-sm font-sans text-body-sm text-outline">
-          Encrypted messages will appear here. Content is decrypted client-side
-          and exists exclusively in volatile memory.
-        </p>
-      </div>
-      <span className="rounded bg-surface-container-low px-2.5 py-1 font-mono text-code-inline text-primary-fixed-dim">
-        Awaiting initial packet transmission...
-      </span>
-    </div>
-  )
-}
-
-function Skeleton() {
-  return (
-    <div className="flex animate-pulse flex-col space-y-5">
-      <div className="flex w-2/3 flex-col items-start space-y-2">
-        <div className="h-3 w-28 rounded bg-surface-container-low" />
-        <div className="h-14 w-full rounded-xl rounded-tl-sm bg-surface-container-low" />
-      </div>
-      <div className="flex w-3/4 flex-col items-end self-end space-y-2">
-        <div className="h-3 w-24 rounded bg-surface-container-low" />
-        <div className="h-16 w-full rounded-xl rounded-tr-sm bg-surface-container-high" />
-      </div>
-      <div className="flex w-1/2 flex-col items-start space-y-2">
-        <div className="h-3 w-32 rounded bg-surface-container-low" />
-        <div className="h-10 w-full rounded-xl rounded-tl-sm bg-surface-container-low" />
-      </div>
-    </div>
-  )
-}
-
 function ChatWorkspace({
-  view,
-  onViewChange,
   roomId,
   messages,
   peersOnline,
@@ -103,7 +50,7 @@ function ChatWorkspace({
   useEffect(() => {
     const el = viewportRef.current
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [messages.length, view])
+  }, [messages.length])
 
   return (
     <div className="flex min-w-0 flex-1 flex-col bg-surface-container-lowest">
@@ -121,22 +68,6 @@ function ChatWorkspace({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-lg bg-surface-container-low p-0.5">
-            {viewTabs.map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => onViewChange(tab.key)}
-                className={`rounded-lg px-2.5 py-1 font-sans text-caption transition-colors focus-visible:outline-2 focus-visible:outline-primary-container ${
-                  view === tab.key
-                    ? 'bg-surface-container-high font-medium text-on-surface'
-                    : 'text-outline hover:text-on-surface'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
           <button
             type="button"
             title={
@@ -190,11 +121,7 @@ function ChatWorkspace({
                     {statusMessage}
                   </div>
                 )}
-                {view === 'chat' && (
-                  <MessageFeed messages={messages} peersOnline={peersOnline} />
-                )}
-                {view === 'empty' && <EmptyState />}
-                {view === 'loading' && <Skeleton />}
+                <MessageFeed messages={messages} peersOnline={peersOnline} />
               </div>
             </div>
             <Composer

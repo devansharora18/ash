@@ -14,11 +14,10 @@ import {
   type SignalingConnection,
 } from '../../lib/signaling'
 import ChatTopbar from './chat_topbar'
-import ChatWorkspace, { type ChatView } from './chat_workspace'
+import ChatWorkspace from './chat_workspace'
 import FileReceiveModal from './file_receive_modal'
 import IncinerateModal from './incinerate_modal'
 import { type ChatMessage } from './message_feed'
-import NavSidebar from './nav_sidebar'
 import QrModal from './qr_modal'
 import RoomSidebar from './room_sidebar'
 import type { ShareSource } from './share_view'
@@ -95,7 +94,6 @@ function ChatPage({
   iceServers,
   onLeave,
 }: ChatPageProps) {
-  const [view, setView] = useState<ChatView>('chat')
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [peers, setPeers] = useState<string[]>([])
   const [connections, setConnections] = useState<Record<string, boolean>>({})
@@ -213,7 +211,6 @@ function ChatPage({
               voice: { url, durationMs },
             },
           ])
-          setView('chat')
         },
         onBoard: (from, event) => {
           void from
@@ -264,7 +261,6 @@ function ChatPage({
             next[idx] = { peerId, stream }
             return next
           })
-          setView('chat')
         },
         onRemoteStreamEnd: (peerId) => {
           setRemoteScreens((prev) => prev.filter((s) => s.peerId !== peerId))
@@ -374,7 +370,6 @@ function ChatPage({
       },
     ])
     void meshRef.current?.broadcast(text)
-    setView('chat')
   }
 
   useEffect(() => {
@@ -406,7 +401,6 @@ function ChatPage({
     for (const peerId of targets) {
       void meshRef.current?.sendVoice(peerId, blob, durationMs)
     }
-    setView('chat')
   }
 
   const cancelTransfer = (t: TransferItem) => {
@@ -517,27 +511,23 @@ function ChatPage({
 
   return (
     <>
-      <NavSidebar />
-      <div className="pl-72">
-        <ChatTopbar
-          displayName={displayName}
-          connected={status.kind === 'connected'}
-        />
-        <main className="min-h-screen w-full bg-surface-container-lowest pt-12">
-          <div className="flex h-[calc(100vh-48px)] w-full overflow-hidden bg-surface-container-lowest select-none">
-            <RoomSidebar
-              roomId={roomId}
-              displayName={displayName}
-              peers={peers}
-              connections={connections}
-              fingerprint={fingerprintOf(identityPub)}
-              onInviteQr={() => setQrOpen(true)}
-              onLeaveRoom={() => setIncinerateOpen(true)}
-            />
-            <ChatWorkspace
-              view={view}
-              onViewChange={setView}
-              roomId={roomId}
+      <ChatTopbar
+        displayName={displayName}
+        connected={status.kind === 'connected'}
+      />
+      <main className="min-h-screen w-full bg-surface-container-lowest pt-12">
+        <div className="flex h-[calc(100vh-48px)] w-full overflow-hidden bg-surface-container-lowest select-none">
+          <RoomSidebar
+            roomId={roomId}
+            displayName={displayName}
+            peers={peers}
+            connections={connections}
+            fingerprint={fingerprintOf(identityPub)}
+            onInviteQr={() => setQrOpen(true)}
+            onLeaveRoom={() => setIncinerateOpen(true)}
+          />
+          <ChatWorkspace
+            roomId={roomId}
               messages={messages}
               peersOnline={connectedCount}
               statusMessage={
@@ -562,7 +552,6 @@ function ChatPage({
             />
           </div>
         </main>
-      </div>
       <QrModal
         open={qrOpen}
         onClose={() => setQrOpen(false)}
