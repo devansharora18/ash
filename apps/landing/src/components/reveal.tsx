@@ -1,24 +1,70 @@
-import { motion } from 'framer-motion'
-import type { ReactNode } from 'react'
+import { useEffect, useRef } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
+
+/**
+ * Scroll reveal without a motion library: one shared IntersectionObserver flips
+ * `data-visible` and index.css owns the transition (and the reduced-motion opt-out).
+ */
+const callbacks = new WeakMap<Element, () => void>()
+let shared: IntersectionObserver | null = null
+
+function revealObserver() {
+  if (!shared) {
+    shared = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          callbacks.get(entry.target)?.()
+          callbacks.delete(entry.target)
+          shared?.unobserve(entry.target)
+        }
+      },
+      { rootMargin: '0px 0px -48px 0px', threshold: 0 },
+    )
+  }
+  return shared
+}
 
 interface RevealProps {
   children: ReactNode
+  /** milliseconds — use for staggering siblings */
   delay?: number
+  /** travel distance in px */
   y?: number
   className?: string
 }
 
-function Reveal({ children, delay = 0, y = 24, className }: RevealProps) {
+function Reveal({ children, delay = 0, y = 18, className }: RevealProps) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    callbacks.set(node, () => {
+      node.dataset.visible = 'true'
+    })
+    const observer = revealObserver()
+    observer.observe(node)
+    return () => {
+      callbacks.delete(node)
+      observer.unobserve(node)
+    }
+  }, [])
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y, scale: 0.98 }}
-      whileInView={{ opacity: 1, y: 0, scale: 1 }}
-      viewport={{ once: true, margin: '-80px' }}
-      transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+    <div
+      ref={ref}
+      data-reveal=""
       className={className}
+      style={
+        {
+          '--reveal-y': `${y}px`,
+          '--reveal-delay': `${delay}ms`,
+        } as CSSProperties
+      }
     >
       {children}
-    </motion.div>
+    </div>
   )
 }
 

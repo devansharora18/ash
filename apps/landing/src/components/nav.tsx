@@ -1,84 +1,97 @@
-import { motion, useMotionValueEvent, useReducedMotion, useScroll } from 'framer-motion'
-import { ArrowUpRight, ShieldCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
+import GithubIcon from './github_icon'
 import { cn } from '../lib/cn'
+import { APP_URL, REPO_URL } from '../lib/links'
 
 const links = [
-  { label: 'Problem', href: '#problem', id: 'problem' },
+  { label: 'Why', href: '#problem', id: 'problem' },
   { label: 'How it works', href: '#how', id: 'how' },
   { label: 'Security', href: '#security', id: 'security' },
-  { label: 'Deploy', href: '#deploy', id: 'deploy' },
+  { label: 'Self-host', href: '#deploy', id: 'deploy' },
 ]
 
 function Nav() {
-  const [scrolled, setScrolled] = useState(false)
   const [active, setActive] = useState<string | null>(null)
-  const reduced = useReducedMotion()
-  const { scrollYProgress } = useScroll()
-  const [progress, setProgress] = useState(0)
-
-  useMotionValueEvent(scrollYProgress, 'change', (value) => {
-    setProgress(value)
-    setScrolled(value > 0.02)
-  })
+  const [scrolled, setScrolled] = useState(false)
+  const bar = useRef<HTMLSpanElement>(null)
 
   useEffect(() => {
-    const observers: IntersectionObserver[] = []
+    let frame = 0
+
+    const measure = () => {
+      frame = 0
+      const doc = document.documentElement
+      const span = doc.scrollHeight - window.innerHeight
+      const ratio = span > 0 ? window.scrollY / span : 0
+      if (bar.current) bar.current.style.transform = `scaleX(${ratio.toFixed(4)})`
+      setScrolled(window.scrollY > 8)
+    }
+
+    const onScroll = () => {
+      if (frame) return
+      frame = requestAnimationFrame(measure)
+    }
+
+    measure()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll, { passive: true })
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+      if (frame) cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  useEffect(() => {
+    const observed: IntersectionObserver[] = []
     for (const link of links) {
-      const el = document.getElementById(link.id)
-      if (!el) continue
+      const node = document.getElementById(link.id)
+      if (!node) continue
       const observer = new IntersectionObserver(
         (entries) => {
           for (const entry of entries) {
             if (entry.isIntersecting) setActive(link.id)
           }
         },
-        { rootMargin: '-40% 0px -55% 0px', threshold: 0 },
+        { rootMargin: '-45% 0px -50% 0px', threshold: 0 },
       )
-      observer.observe(el)
-      observers.push(observer)
+      observer.observe(node)
+      observed.push(observer)
     }
     return () => {
-      for (const observer of observers) observer.disconnect()
+      for (const observer of observed) observer.disconnect()
     }
   }, [])
 
   return (
     <header
       className={cn(
-        'fixed inset-x-0 top-0 z-50 border-b transition-colors duration-300',
+        'fixed inset-x-0 top-0 z-50 border-b transition-colors duration-500',
         scrolled
-          ? 'border-surface-container-high bg-surface-container-lowest/70 backdrop-blur-xl'
+          ? 'border-hairline bg-background/82 backdrop-blur-md'
           : 'border-transparent bg-transparent',
       )}
     >
-      <nav className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-6">
-        <a
-          href="#top"
-          className="flex items-center gap-2 rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary-container"
-        >
-          <span className="font-sans text-headline-md font-semibold lowercase tracking-tight text-on-surface">
+      <nav className="mx-auto flex h-14 w-full max-w-[1240px] items-center justify-between gap-6 px-5 sm:px-8">
+        <a href="#top" className="group flex items-baseline gap-2">
+          <span className="font-display text-headline-sm leading-none lowercase tracking-[-0.05em] text-on-surface">
             ash
           </span>
-          <motion.span
-            className="h-1.5 w-1.5 rounded-full bg-primary-container shadow-[0_0_8px] shadow-primary-container"
-            animate={reduced ? { opacity: 1 } : { opacity: [0.5, 1, 0.5] }}
-            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-          />
+          <span aria-hidden="true" className="live-dot h-1.5 w-1.5 rounded-full bg-primary-container" />
+          <span className="sr-only">Ash, home</span>
         </a>
 
-        <div className="hidden items-center gap-1 md:flex">
+        <div className="hidden items-center gap-7 md:flex">
           {links.map((link) => (
             <a
-              key={link.href}
+              key={link.id}
               href={link.href}
-              aria-current={active === link.id ? 'page' : undefined}
+              data-active={active === link.id}
+              aria-current={active === link.id ? 'true' : undefined}
               className={cn(
-                'rounded-md px-3 py-1.5 font-mono text-code-inline uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container',
-                active === link.id
-                  ? 'text-primary'
-                  : 'text-on-surface-variant hover:text-on-surface',
+                'link-wipe font-mono text-code-inline uppercase tracking-[0.16em]',
+                active === link.id ? 'text-primary' : 'text-on-surface-variant hover:text-on-surface',
               )}
             >
               {link.label}
@@ -86,22 +99,29 @@ function Nav() {
           ))}
         </div>
 
-        <a
-          href="https://github.com/devansharora18/ash"
-          target="_blank"
-          rel="noreferrer"
-          className="flex items-center gap-1.5 rounded-md border border-surface-container-high bg-surface-container px-3 py-1.5 font-sans text-body-sm-medium text-on-surface transition-colors hover:border-outline-variant focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
-        >
-          <ShieldCheck className="h-4 w-4 text-primary-container" />
-          Source
-          <ArrowUpRight className="h-3.5 w-3.5 text-on-surface-variant" />
-        </a>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Ash source on GitHub"
+            className="hidden text-on-surface-variant transition-colors duration-300 hover:text-primary sm:block"
+          >
+            <GithubIcon className="h-[18px] w-[18px]" />
+          </a>
+          <a
+            href={APP_URL}
+            className="inline-flex h-9 items-center rounded-sm bg-primary-container px-3.5 font-sans text-body-sm-medium text-on-primary transition-colors duration-300 hover:bg-on-surface hover:text-background active:translate-y-px"
+          >
+            Start a room
+          </a>
+        </div>
       </nav>
 
-      <motion.div
+      <span
+        ref={bar}
         aria-hidden="true"
-        className="h-px bg-primary-container"
-        style={{ scaleX: progress, transformOrigin: '0% 50%' }}
+        className="block h-px origin-left scale-x-0 bg-primary-container"
       />
     </header>
   )

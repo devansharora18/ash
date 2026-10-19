@@ -1,78 +1,57 @@
-import { motion } from 'framer-motion'
-import { ArrowRight } from 'lucide-react'
+import Arrow from './arrow'
+import Reveal from './reveal'
+import { APP_URL, REPO_URL } from '../lib/links'
 
-import DissolveNetwork from './dissolve_network'
-import SplitFlapText from './split_flap_text'
-import { staggerContainer, staggerItem } from '../lib/anim'
-
-const claims = ['no accounts', 'no history', 'no logs', 'no central database']
-
+/**
+ * The closer. The page has been paper the whole way down; here it burns through
+ * to carbon (a torn top edge, inverted surface) for the single action.
+ */
 function SectionCta() {
   return (
-    <section className="relative overflow-hidden border-b border-surface-container-high">
-      <div className="relative z-10">
-        <motion.div
-          variants={staggerContainer}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true, margin: '-80px' }}
-          className="mx-auto flex w-full max-w-6xl flex-col items-start gap-8 px-6 py-36"
-        >
-          <motion.h2
-            variants={staggerItem}
-            className="max-w-2xl font-sans text-headline-lg font-semibold tracking-tight text-on-surface"
+    <section className="torn-top bg-band text-on-band">
+      <div className="mx-auto w-full max-w-[1240px] px-5 pb-24 pt-32 sm:px-8 sm:pb-28 sm:pt-36 lg:pt-40">
+        <Reveal>
+          <p className="font-mono text-code-inline uppercase tracking-[0.2em] text-band-accent">
+            the invitation
+          </p>
+        </Reveal>
+
+        <Reveal delay={90}>
+          <h2 className="mt-8 max-w-[16ch] font-display text-display-lg font-semibold text-balance">
+            There is nothing left to leak.
+          </h2>
+        </Reveal>
+
+        <Reveal delay={180}>
+          <p className="mt-8 max-w-[48ch] font-sans text-body-base text-on-band/75">
+            Make a room, send one link, say what you actually need to say. When you
+            close the tab the room is gone — and there was never a copy to lose.
+          </p>
+        </Reveal>
+
+        <Reveal delay={260} className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
+          <a
+            href={APP_URL}
+            className="group inline-flex h-12 items-center gap-2.5 rounded-sm bg-band-accent px-6 font-sans text-body-sm-medium text-band transition-colors duration-300 hover:bg-on-band hover:text-band active:translate-y-px"
           >
-            Browsers own the conversation.
-            <br />
-            <span className="text-primary-container">Ash just introduces them.</span>
-          </motion.h2>
+            Start a room
+            <Arrow />
+          </a>
+          <a
+            href={REPO_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="link-wipe font-mono text-code-inline uppercase tracking-[0.14em] text-on-band/80 transition-colors duration-300 hover:text-on-band"
+          >
+            read the source
+          </a>
+        </Reveal>
 
-          <motion.div variants={staggerItem} className="flex flex-wrap items-center gap-3">
-            <a
-              href="https://github.com/devansharora18/ash"
-              target="_blank"
-              rel="noreferrer"
-              className="group inline-flex h-11 items-center gap-2 rounded-lg bg-primary-container px-5 font-sans text-body-sm-medium font-semibold text-on-primary transition-shadow hover:shadow-[0_0_24px] hover:shadow-primary-container/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container"
-            >
-              Explore the source
-              <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
-            </a>
-          </motion.div>
-
-          <motion.div variants={staggerItem} className="w-full overflow-hidden">
-            <SplitFlapText
-              words={['NO ACCOUNTS', 'NO HISTORY', 'NO LOGS', 'NO CENTRAL DATABASE']}
-              cycleDelay={2200}
-              flipDuration={0.1}
-              stagger={0.05}
-              flipsPerChar={6}
-              charset="alphanumeric"
-              tileColor="#16161f"
-              textColor="#38bdf8"
-              tileRadius={6}
-              gap={5}
-              fontSize={34}
-              loop
-              padTo={19}
-            />
-          </motion.div>
-
-          <motion.ul variants={staggerItem} className="flex flex-wrap gap-x-6 gap-y-2">
-            {claims.map((claim) => (
-              <li
-                key={claim}
-                className="flex items-center gap-2 font-mono text-code-inline text-on-surface-variant"
-              >
-                <span className="text-primary-container">→</span>
-                {claim}
-              </li>
-            ))}
-          </motion.ul>
-        </motion.div>
-      </div>
-
-      <div className="absolute inset-0 opacity-40">
-        <DissolveNetwork />
+        <Reveal delay={340} className="mt-16 border-t border-on-band/20 pt-5">
+          <p className="font-mono text-code-inline uppercase tracking-[0.14em] text-on-band/60">
+            no account · no install · nothing to hand over
+          </p>
+        </Reveal>
       </div>
     </section>
   )

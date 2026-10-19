@@ -1,99 +1,128 @@
-import { motion } from 'framer-motion'
-import { useState } from 'react'
+import type { CSSProperties } from 'react'
 
-import MessagePathTerminal from './message_path_terminal'
-import TopologyDiagram, { type TopologyFocus } from './topology_diagram'
-import { staggerContainer, staggerItem } from '../lib/anim'
-import SectionShell from './section_shell'
+import Reveal from './reveal'
+import SectionHead from './section_head'
+import { cn } from '../lib/cn'
 
-const facts = [
+const observations = [
   {
     label: 'What the server sees',
-    focus: 'signaling' as const,
-    value: 'only connection metadata — room IDs, who joined, when. Never plaintext.',
+    body: 'Room names, who joined, and when. Never the message itself — there is nothing readable to hand over.',
   },
   {
     label: 'What the server stores',
-    focus: 'none' as const,
-    value: 'volatile in-memory state. Nothing written to disk, logs carry no message content.',
+    body: 'Nothing that outlives the room. State lives in memory and is dropped the moment the last peer leaves.',
+    aside: 'no message log · no message database',
   },
   {
-    label: 'Where encryption happens',
-    focus: 'data' as const,
-    value: 'in the browser, before a byte leaves the device.',
+    label: 'Where sealing happens',
+    body: 'On your device, before the first byte leaves it. The keys never travel alongside the message.',
   },
 ]
 
-function Security() {
-  const [focus, setFocus] = useState<TopologyFocus>('none')
+const specimen = [
+  { label: 'as typed', value: 'meet at the north gate, 6:40' },
+  { label: 'on the wire', value: 'kR7vQ2mXpLd9FzT4wB1nJcYe6aH8sUoGq3Vt' },
+]
 
+const limits = [
+  'Ash is privacy-oriented, not an anonymity network. Connection metadata still exists.',
+  'A recipient can always copy or screenshot what they see.',
+  'End-to-end encryption protects what you say, not who you talked to.',
+]
+
+const row = (index: number) => ({ '--row': index }) as CSSProperties
+
+function SectionSecurity() {
   return (
-    <SectionShell
-      id="security"
-      eyebrow="Security model"
-      title="The server never reads the conversation."
-      lead="Peers agree on keys and encrypt locally with libsodium — X25519 key exchange and XSalsa20-Poly1305 authenticated encryption. The signaling path handles only handshake data."
-      width="wide"
-    >
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
-        className="grid gap-6 lg:grid-cols-5"
-      >
-        <div className="lg:col-span-3">
-          <motion.div
-            variants={staggerItem}
-            onMouseEnter={() => setFocus('none')}
-          >
-            <TopologyDiagram focus={focus} />
-          </motion.div>
-          <div className="mt-4 grid gap-px overflow-hidden rounded-2xl border border-surface-container-high bg-surface-container-high sm:grid-cols-3">
-            {facts.map((fact) => (
+    <section id="security" className="scroll-mt-24 border-t border-hairline py-24 sm:py-28 lg:py-32">
+      <div className="mx-auto w-full max-w-[1240px] px-5 sm:px-8">
+        <SectionHead
+          numeral="04"
+          eyebrow="The security model"
+          title="The server never reads the conversation."
+          lead="Everything is sealed on your device before it travels. What the server handles is closer to a switchboard: who to introduce, and nothing about what is said."
+        />
+
+        {/* Observed, stored, sealed — one sheet, three answers. */}
+        <Reveal className="mt-16 lg:mt-20">
+          <div className="grid gap-y-9 border-t-2 border-on-surface/70 pt-7 sm:grid-cols-2 lg:grid-cols-3 lg:gap-x-10">
+            {observations.map((item, index) => (
               <div
-                key={fact.label}
-                onMouseEnter={() => setFocus(fact.focus)}
-                onMouseLeave={() => setFocus('none')}
-                className="cursor-default bg-surface-container-lowest p-4 transition-colors hover:bg-surface-container"
+                key={item.label}
+                className={cn(
+                  'sm:border-hairline lg:border-l lg:pl-6',
+                  index === 0 && 'lg:border-l-0 lg:pl-0',
+                  index === 1 && 'sm:border-l sm:pl-6 lg:pl-6',
+                )}
               >
-                <p className="font-mono text-code-inline uppercase tracking-wider text-primary-container">
-                  {fact.label}
+                <p className="font-mono text-code-inline uppercase tracking-[0.16em] text-primary">
+                  {item.label}
                 </p>
-                <p className="mt-1.5 font-sans text-caption leading-relaxed text-on-surface-variant">
-                  {fact.value}
-                </p>
+                <p className="mt-3.5 font-sans text-body-base text-on-surface">{item.body}</p>
+
+                {item.aside && (
+                  <p className="mt-3 font-mono text-caption uppercase tracking-[0.14em] text-on-surface-variant">
+                    {item.aside}
+                  </p>
+                )}
+
+                {index === 2 && (
+                  <dl className="mt-5 flex flex-col gap-4 font-mono text-caption">
+                    {specimen.map((line) => (
+                      <div key={line.label}>
+                        <dt className="uppercase tracking-[0.16em] text-on-surface-variant/80">
+                          {line.label}
+                        </dt>
+                        <dd
+                          className={cn(
+                            'mt-1.5 break-all',
+                            line.label === 'on the wire' ? 'text-on-surface-variant' : 'text-on-surface',
+                          )}
+                        >
+                          {line.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
               </div>
             ))}
           </div>
-        </div>
+        </Reveal>
 
-        <div className="flex flex-col gap-4 lg:col-span-2">
-          <motion.div
-            variants={staggerItem}
-            onMouseEnter={() => setFocus('data')}
-            onMouseLeave={() => setFocus('none')}
-          >
-            <MessagePathTerminal />
-          </motion.div>
+        <Reveal delay={120} className="mt-10">
+          <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 font-mono text-code-inline text-on-surface-variant">
+            <span className="uppercase tracking-[0.16em] text-primary">sealed with</span>
+            <span>X25519 key exchange · XSalsa20-Poly1305 authenticated encryption · Ed25519 signatures</span>
+          </p>
+        </Reveal>
 
-          <motion.div
-            variants={staggerItem}
-            className="rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 p-6 backdrop-blur-sm"
-          >
-            <p className="font-mono text-code-inline uppercase tracking-widest text-on-surface-variant">
+        {/* The limits belong on the page, in the margin, next to the claim. */}
+        <div className="mt-16 grid gap-y-6 lg:mt-20 lg:grid-cols-12 lg:gap-x-10">
+          <Reveal className="lg:col-span-2">
+            <p className="font-mono text-code-inline uppercase tracking-[0.16em] text-on-surface-variant">
               honest limits
             </p>
-            <ul className="mt-3 flex flex-col gap-2 font-sans text-caption leading-relaxed text-on-surface-variant">
-              <li>Ash is privacy-oriented, not an anonymity network.</li>
-              <li>A recipient can always copy or screenshot what they see.</li>
-              <li>E2EE protects content, not connection metadata.</li>
+          </Reveal>
+
+          <Reveal delay={100} className="lg:col-span-8 lg:col-start-4">
+            <ul>
+              {limits.map((limit, index) => (
+                <li
+                  key={limit}
+                  className="stagger-row border-t border-dashed border-outline-variant py-4 first:border-t-0 first:pt-0"
+                  style={row(index)}
+                >
+                  <span className="font-sans text-body-sm text-on-surface-variant">{limit}</span>
+                </li>
+              ))}
             </ul>
-          </motion.div>
+          </Reveal>
         </div>
-      </motion.div>
-    </SectionShell>
+      </div>
+    </section>
   )
 }
 
-export default Security
+export default SectionSecurity

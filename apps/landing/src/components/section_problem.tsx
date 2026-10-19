@@ -1,72 +1,122 @@
-import { motion } from 'framer-motion'
-import { UserX, History, Database } from 'lucide-react'
+import type { CSSProperties } from 'react'
 
-import LeaksDiagram from './leaks_diagram'
-import { staggerContainer, staggerItem } from '../lib/anim'
-import SectionShell from './section_shell'
+import Reveal from './reveal'
+import SectionHead from './section_head'
 
-const problems = [
-  {
-    icon: UserX,
-    title: 'Accounts',
-    body: 'Sign-up walls, profiles, friend graphs — identity baggage attached to the sender.',
-  },
-  {
-    icon: History,
-    title: 'History',
-    body: 'Every message stored, indexed, searchable — a record that outlives the conversation.',
-  },
-  {
-    icon: Database,
-    title: 'A database',
-    body: 'Your words parked on infrastructure you do not control, long after you are gone.',
-  },
+const kept = [
+  { label: 'Account, email or phone number', value: 'Required' },
+  { label: 'Every message you send', value: 'Stored' },
+  { label: 'Who you talk to, and when', value: 'Logged' },
+  { label: 'Searchable history', value: 'Indexed' },
+  { label: 'Backups you never see', value: 'Replicated' },
 ]
 
-function Problem() {
-  return (
-    <SectionShell
-      id="problem"
-      eyebrow="The problem"
-      title="Traditional chat assumes a permanent record."
-      lead="Convenience features — accounts, history, sync, search — are built on persistent infrastructure that owns your words."
-      width="wide"
-    >
-      <motion.div
-        variants={staggerContainer}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, margin: '-80px' }}
-        className="grid items-start gap-10 lg:grid-cols-[1.5fr_1fr]"
-      >
-        <motion.div variants={staggerItem}>
-          <LeaksDiagram />
-        </motion.div>
+const notKept = [
+  { label: 'Account, email or phone number', value: 'None' },
+  { label: 'Every message you send', value: 'Not stored' },
+  { label: 'Who you talk to, and when', value: 'Not logged' },
+  { label: 'Searchable history', value: 'Does not exist' },
+  { label: 'Backups you never see', value: 'None' },
+]
 
-        <div className="flex flex-col gap-4">
-          {problems.map(({ icon: Icon, title, body }) => (
-            <motion.div
-              key={title}
-              variants={staggerItem}
-              className="flex items-start gap-4 rounded-2xl border border-surface-container-high bg-surface-container-lowest/70 p-5 backdrop-blur-sm"
-            >
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-container-high bg-surface-container">
-                <Icon className="h-4 w-4 text-primary-container" />
+const row = (index: number) => ({ '--row': index }) as CSSProperties
+
+function SectionProblem() {
+  return (
+    <section id="problem" className="scroll-mt-24 border-t border-hairline py-24 sm:py-28 lg:py-32">
+      <div className="mx-auto w-full max-w-[1240px] px-5 sm:px-8">
+        <SectionHead
+          numeral="02"
+          eyebrow="The problem"
+          title="Every other messenger keeps a copy. That copy is the liability."
+          lead="Whatever is stored somewhere can later be read, sold, seized, or spilled in a breach. You cannot lose what was never written down."
+        />
+
+        <div className="mt-16 grid gap-y-14 lg:mt-20 lg:grid-cols-12 lg:gap-x-10">
+          {/* What a conventional messenger retains */}
+          <Reveal className="lg:col-span-6 lg:col-start-1">
+            <div className="flex items-baseline justify-between gap-4 border-b-2 border-on-surface/70 pb-3">
+              <h3 className="font-sans text-headline-sm font-semibold text-on-surface">
+                A normal chat app
+              </h3>
+              <span className="font-mono text-code-inline uppercase tracking-[0.16em] text-on-surface-variant">
+                what it retains
+              </span>
+            </div>
+
+            <ul className="mt-1">
+              {kept.map((item, index) => (
+                <li
+                  key={item.label}
+                  className="stagger-row flex items-baseline justify-between gap-6 border-b border-hairline py-3.5"
+                  style={row(index)}
+                >
+                  <span className="font-sans text-body-sm text-on-surface-variant">{item.label}</span>
+                  <span className="shrink-0 font-mono text-code-inline uppercase tracking-[0.12em] text-on-surface">
+                    {item.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            <div className="stagger-row mt-6 flex items-end justify-between gap-6" style={row(5)}>
+              <span className="font-sans text-body-sm text-on-surface-variant">
+                Kept, for good measure
+              </span>
+              <span className="font-display text-headline-md font-semibold text-on-surface">
+                forever
+              </span>
+            </div>
+
+            <div className="stagger-row mt-10" style={row(7)}>
+              <span className="stamp">kept forever</span>
+            </div>
+          </Reveal>
+
+          {/* What Ash retains — same questions, offset and charred */}
+          <Reveal delay={160} className="char-shadow relative lg:col-span-5 lg:col-start-8 lg:mt-24">
+            <div className="torn rounded-lg border border-hairline bg-panel px-5 pb-10 pt-5 shadow-panel">
+              <div className="flex items-baseline justify-between gap-4 border-b-2 border-primary-container pb-3">
+                <h3 className="font-sans text-headline-sm font-semibold text-on-surface">Ash</h3>
+                <span className="font-mono text-code-inline uppercase tracking-[0.16em] text-primary">
+                  what it retains
+                </span>
               </div>
-              <div>
-                <h3 className="font-sans text-headline-sm font-semibold tracking-tight text-on-surface">
-                  {title}
-                </h3>
-                <p className="mt-1 font-sans text-body-sm leading-relaxed text-on-surface-variant">
-                  {body}
-                </p>
+
+              <ul className="mt-1">
+                {notKept.map((item, index) => (
+                  <li
+                    key={item.label}
+                    className="stagger-row flex items-baseline justify-between gap-6 border-b border-hairline py-3.5"
+                    style={row(index + 2)}
+                  >
+                    <span className="font-sans text-body-sm text-on-surface-variant">
+                      {item.label}
+                    </span>
+                    <span className="shrink-0 font-mono text-code-inline uppercase tracking-[0.12em] text-on-surface">
+                      {item.value}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+
+              <div
+                className="stagger-row mt-6 flex items-end justify-between gap-6"
+                style={row(8)}
+              >
+                <span className="font-sans text-body-sm text-on-surface-variant">
+                  Total retained
+                </span>
+                <span className="font-display text-headline-md font-semibold text-primary">
+                  0 bytes
+                </span>
               </div>
-            </motion.div>
-          ))}
+            </div>
+          </Reveal>
         </div>
-      </motion.div>
-    </SectionShell>
+      </div>
+    </section>
   )
 }
 
-export default Problem
+export default SectionProblem

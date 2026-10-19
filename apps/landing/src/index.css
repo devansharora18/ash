@@ -1,101 +1,645 @@
 @import "tailwindcss";
 
+/* ==========================================================================
+   Ash — thermal editorial
+   Newsprint and carbon, printed-magazine type, one ember accent.
+   Light = paper, dark = basalt. Both are first-class.
+   ========================================================================== */
+
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* ---- type ---------------------------------------------------------- */
+  --font-sans: "Instrument Sans", "Helvetica Neue", Helvetica, sans-serif;
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
-  --color-background: #0a0a0f;
-  --color-surface: #0a0a0f;
-  --color-surface-dim: #0a0a0f;
-  --color-surface-container-lowest: #0d0d14;
-  --color-surface-container-low: #14141d;
-  --color-surface-container: #191923;
-  --color-surface-container-high: #22222e;
-  --color-surface-container-highest: #2b2b38;
-  --color-on-surface: #eef0f4;
-  --color-on-surface-variant: #a6adbb;
-  --color-on-background: #eef0f4;
-  --color-outline: #5d6470;
-  --color-outline-variant: #2c313d;
-  --color-primary: #7dd3fc;
-  --color-primary-container: #38bdf8;
-  --color-on-primary: #082f49;
-  --color-secondary: #a78bfa;
-  --color-secondary-container: #8b5cf6;
-  --color-teal: #2dd4bf;
-  --color-secondary-fixed: #e2e2e2;
-  --color-error: #ffb4ab;
-  --color-error-container: #93000a;
+  --text-caption: clamp(0.6875rem, 0.67rem + 0.09vw, 0.75rem);
+  --text-caption--line-height: 1.35;
+  --text-caption--letter-spacing: 0.01em;
 
-  --text-caption: 0.75rem;
-  --text-caption--line-height: 1rem;
-  --text-caption--font-weight: 400;
+  --text-code-inline: clamp(0.6875rem, 0.65rem + 0.19vw, 0.8125rem);
+  --text-code-inline--line-height: 1.45;
+  --text-code-inline--letter-spacing: 0.01em;
 
-  --text-code-inline: 0.75rem;
-  --text-code-inline--line-height: 1.1rem;
-  --text-code-inline--letter-spacing: 0.02em;
-  --text-code-inline--font-weight: 400;
+  --text-body-sm: clamp(0.875rem, 0.85rem + 0.13vw, 0.9375rem);
+  --text-body-sm--line-height: 1.65;
+  --text-body-sm--letter-spacing: -0.008em;
 
-  --text-body-sm: 0.875rem;
-  --text-body-sm--line-height: 1.5rem;
-  --text-body-sm--letter-spacing: -0.006em;
-  --text-body-sm--font-weight: 400;
+  --text-body-sm-medium: clamp(0.875rem, 0.85rem + 0.13vw, 0.9375rem);
+  --text-body-sm-medium--line-height: 1.65;
+  --text-body-sm-medium--letter-spacing: -0.008em;
+  --text-body-sm-medium--font-weight: 600;
 
-  --text-body-base: 1rem;
-  --text-body-base--line-height: 1.7rem;
-  --text-body-base--letter-spacing: -0.011em;
-  --text-body-base--font-weight: 400;
+  --text-body-base: clamp(1rem, 0.96rem + 0.21vw, 1.125rem);
+  --text-body-base--line-height: 1.7;
+  --text-body-base--letter-spacing: -0.01em;
 
-  --text-body-lg: 1.125rem;
-  --text-body-lg--line-height: 1.8rem;
-  --text-body-lg--letter-spacing: -0.013em;
-  --text-body-lg--font-weight: 400;
-
-  --text-headline-sm: 1rem;
-  --text-headline-sm--line-height: 1.5rem;
-  --text-headline-sm--letter-spacing: -0.01em;
+  --text-headline-sm: clamp(1.0625rem, 1rem + 0.31vw, 1.25rem);
+  --text-headline-sm--line-height: 1.35;
+  --text-headline-sm--letter-spacing: -0.015em;
   --text-headline-sm--font-weight: 600;
 
-  --text-headline-md: 1.375rem;
-  --text-headline-md--line-height: 1.9rem;
-  --text-headline-md--letter-spacing: -0.018em;
+  --text-headline-md: clamp(1.375rem, 1.14rem + 1.19vw, 2rem);
+  --text-headline-md--line-height: 1.2;
+  --text-headline-md--letter-spacing: -0.022em;
   --text-headline-md--font-weight: 600;
 
-  --text-headline-lg: 2rem;
-  --text-headline-lg--line-height: 2.6rem;
-  --text-headline-lg--letter-spacing: -0.028em;
-  --text-headline-lg--font-weight: 650;
+  --text-headline-lg: clamp(1.75rem, 1.3rem + 2.3vw, 2.75rem);
+  --text-headline-lg--line-height: 1.12;
+  --text-headline-lg--letter-spacing: -0.03em;
+  --text-headline-lg--font-weight: 600;
 
-  --text-display-md: 3rem;
-  --text-display-md--line-height: 1.04;
-  --text-display-md--letter-spacing: -0.04em;
-  --text-display-md--font-weight: 700;
+  --text-display-md: clamp(2.25rem, 1.35rem + 4.5vw, 4.25rem);
+  --text-display-md--line-height: 0.94;
+  --text-display-md--letter-spacing: -0.035em;
+  --text-display-md--font-weight: 600;
 
-  --text-display-lg: 4.5rem;
-  --text-display-lg--line-height: 0.98;
-  --text-display-lg--letter-spacing: -0.05em;
-  --text-display-lg--font-weight: 700;
+  --text-display-lg: clamp(2.75rem, 1.05rem + 8.6vw, 7.5rem);
+  --text-display-lg--line-height: 0.92;
+  --text-display-lg--letter-spacing: -0.045em;
+  --text-display-lg--font-weight: 600;
+
+  /* ---- palette (light: paper) ---------------------------------------- */
+  --color-background: #f2ebe0;
+  --color-surface: #f2ebe0;
+  --color-surface-container-low: #f7f2e8;
+  --color-surface-container: #f0e8db;
+  --color-on-surface: #16130f;
+  --color-on-surface-variant: #5b5147;
+  --color-outline: #8d8172;
+  --color-outline-variant: #d9cdb8;
+  --color-hairline: rgb(22 19 15 / 0.14);
+  --color-rule: rgb(22 19 15 / 0.055);
+  --color-panel: #fcf9f4;
+
+  --color-primary: #b93b12;
+  --color-primary-container: #d9410f;
+  --color-on-primary: #fff7f1;
+  --color-secondary: #6f6353;
+  --color-teal: #5f7057;
+  --color-error: #9b2c17;
+
+  /* The closing band: an inverted surface so the accent and text flip with it. */
+  --color-band: #16130f;
+  --color-on-band: #f2ebe0;
+  --color-band-accent: #ff8a5c;
+
+  /* ---- shape, motion, depth ------------------------------------------ */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
+  --radius-pill: 999px;
+
+  --ease-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.34, 1.32, 0.64, 1);
+
+  --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.6), 0 12px 28px -22px rgb(58 38 20 / 0.5);
+  --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.5), 0 26px 54px -30px rgb(58 38 20 / 0.55);
 }
 
 @layer base {
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-background: #100e0c;
+      --color-surface: #100e0c;
+      --color-surface-container-low: #1c1917;
+      --color-surface-container: #221e1b;
+      --color-on-surface: #ece4d6;
+      --color-on-surface-variant: #a79b89;
+      --color-outline: #6f6455;
+      --color-outline-variant: #332c26;
+      --color-hairline: rgb(236 228 214 / 0.17);
+      --color-rule: rgb(236 228 214 / 0.05);
+      --color-panel: #1e1a17;
+
+      --color-primary: #ff8a5c;
+      --color-primary-container: #e5491a;
+      --color-on-primary: #2a0d04;
+      --color-secondary: #cbbb9f;
+      --color-teal: #9aa88c;
+      --color-error: #ff9b83;
+
+      --color-band: #ece4d6;
+      --color-on-band: #100e0c;
+      --color-band-accent: #b03410;
+
+      --shadow-lift: 0 1px 0 rgb(255 255 255 / 0.04), 0 12px 28px -22px rgb(0 0 0 / 0.9);
+      --shadow-panel: 0 1px 0 rgb(255 255 255 / 0.04), 0 26px 54px -30px rgb(0 0 0 / 0.95);
+    }
+  }
+
+  :root {
+    color-scheme: light;
+    --rule-offset: 0px;
+  }
+
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     overscroll-behavior: none;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     background-color: var(--color-background);
     color: var(--color-on-surface);
+    font-synthesis-weight: none;
+  }
+
+  /* Fraunces has optical sizing; let it breathe at display sizes */
+  .font-display {
+    font-variation-settings: "SOFT" 20, "WONK" 1;
   }
 
   ::selection {
-    background: rgba(56, 189, 248, 0.28);
+    background: color-mix(in oklab, var(--color-primary-container) 26%, transparent);
     color: var(--color-on-surface);
   }
 
+  :where(a, button, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-primary-container);
+    outline-offset: 3px;
+    border-radius: var(--radius-xs);
+  }
+
   ::-webkit-scrollbar {
-    display: none;
+    width: 12px;
+    height: 12px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-container-low);
+    border-left: 1px solid var(--color-hairline);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-outline);
+    border: 3px solid var(--color-surface-container-low);
+    border-radius: var(--radius-pill);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary-container);
+  }
+  * {
+    scrollbar-color: var(--color-outline) var(--color-surface-container-low);
+    scrollbar-width: thin;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* ---- atmosphere: warm wash + ruled paper stock ---------------------- */
+  .atmosphere {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(115% 78% at 8% -6%, color-mix(in oklab, var(--color-primary-container) 12%, transparent), transparent 62%),
+      radial-gradient(80% 55% at 96% 4%, color-mix(in oklab, #a07a46 16%, transparent), transparent 58%),
+      radial-gradient(120% 90% at 50% 108%, color-mix(in oklab, var(--color-secondary) 12%, transparent), transparent 60%),
+      repeating-linear-gradient(
+        to bottom,
+        var(--color-rule) 0 1px,
+        transparent 1px 34px
+      );
+    background-size: auto, auto, auto, auto;
+    opacity: 0.9;
+  }
+
+  .grain {
+    position: fixed;
+    inset: -60px;
+    /* above content, below the masthead, so the whole page reads as printed stock */
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0.42;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .grain {
+      mix-blend-mode: soft-light;
+      opacity: 0.3;
+    }
+  }
+
+  /* ---- load cascade -------------------------------------------------- */
+  .rise {
+    opacity: 0;
+    animation: ash-rise 0.85s var(--ease-expo) both;
+    animation-delay: calc(var(--i, 0) * 85ms + 100ms);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .rise {
+      opacity: 1;
+      animation: none;
+    }
+  }
+
+  /* ---- hairline rules ------------------------------------------------- */
+  .rule-x {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--color-hairline) 12%,
+      var(--color-hairline) 88%,
+      transparent
+    );
+  }
+
+  .link-wipe {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    background-size: 0% 1px;
+    transition: background-size 0.45s var(--ease-expo), color 0.3s var(--ease-soft);
+  }
+  .link-wipe:hover,
+  .link-wipe[data-active="true"] {
+    background-size: 100% 1px;
+  }
+
+  /* ---- torn / charred panel edge -------------------------------------- */
+  .torn {
+    --torn: polygon(
+      0 0,
+      100% 0,
+      100% calc(100% - 9px),
+      90% calc(100% - 3px),
+      76% calc(100% - 11px),
+      58% calc(100% - 4px),
+      41% calc(100% - 12px),
+      24% calc(100% - 5px),
+      11% calc(100% - 10px),
+      0 calc(100% - 3px)
+    );
+    clip-path: var(--torn);
+  }
+
+  /* Ragged top edge: the page burns through to the closing band. */
+  .torn-top {
+    clip-path: polygon(
+      0 15px,
+      6% 6px,
+      13% 17px,
+      21% 5px,
+      29% 13px,
+      37% 4px,
+      45% 16px,
+      53% 7px,
+      61% 18px,
+      69% 5px,
+      77% 12px,
+      85% 3px,
+      93% 14px,
+      100% 6px,
+      100% 100%,
+      0 100%
+    );
+  }
+
+  .char-shadow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    clip-path: var(--torn);
+    background: color-mix(in oklab, var(--color-primary-container) 46%, #140d07);
+    transform: translateY(8px);
+    filter: blur(8px);
+    opacity: 0.55;
+  }
+
+  /* ---- the evaporating transcript ------------------------------------- */
+  .msg {
+    animation: ash-msg 11s linear infinite;
+    animation-delay: calc(var(--i, 0) * 1.7s);
+  }
+
+  .msg-ember {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(
+        90deg,
+        transparent 0 96%,
+        color-mix(in oklab, var(--color-primary-container) 92%, transparent) 97%,
+        color-mix(in oklab, #ffdfc2 96%, transparent) 97.6%,
+        transparent 98.4%
+      ),
+      linear-gradient(
+        90deg,
+        transparent 0 86%,
+        color-mix(in oklab, var(--color-primary-container) 20%, transparent) 92%,
+        color-mix(in oklab, var(--color-primary-container) 55%, transparent) 96%,
+        color-mix(in oklab, #ffc79a 80%, transparent) 97.8%,
+        transparent 100%
+      );
+    /* vertical falloff so the front reads as heat, not a coloured bar */
+    mask-image: linear-gradient(180deg, transparent 0%, #000 30%, #000 70%, transparent 100%);
+    filter: blur(2.5px);
+    animation: ash-sweep 11s linear infinite;
+    animation-delay: calc(var(--i, 0) * 1.7s);
+  }
+
+  /* Ash is what's left *behind* the flame, so it paints on the burnt side and
+     fades the further back it is. */
+  .msg-residue {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    color: var(--color-outline);
+    background-image: radial-gradient(currentColor 0.5px, transparent 0.6px);
+    background-size: 6px 6px;
+    mask-image: linear-gradient(90deg, transparent 0%, #000 58%);
+    opacity: 0;
+    animation: ash-residue 11s linear infinite;
+    animation-delay: calc(var(--i, 0) * 1.7s);
+  }
+
+  .live-dot {
+    animation: ash-pulse 2.8s var(--ease-soft) infinite;
+  }
+
+  /* ---- scroll reveal -------------------------------------------------- */
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(var(--reveal-y, 18px));
+    transition:
+      opacity 0.7s var(--ease-expo),
+      transform 0.7s var(--ease-expo);
+    transition-delay: var(--reveal-delay, 0ms);
+  }
+
+  [data-reveal][data-visible='true'] {
+    opacity: 1;
+    transform: none;
+  }
+
+  /* Rows cascade inside a single revealed block: one observer, many beats. */
+  .stagger-row {
+    opacity: 0;
+  }
+
+  [data-visible='true'] .stagger-row {
+    animation: ash-rise 0.6s var(--ease-expo) both;
+    animation-delay: calc(var(--row, 0) * 70ms);
+  }
+
+  /* ---- blinking terminal caret ---------------------------------------- */
+  .caret {
+    display: inline-block;
+    width: 0.55em;
+    height: 1em;
+    vertical-align: -0.15em;
+    background: var(--color-primary-container);
+    animation: ash-blink 1.1s steps(2, end) infinite;
+  }
+
+  /* ---- rubber stamp --------------------------------------------------- */
+  .stamp {
+    display: inline-block;
+    border: 2px solid currentColor;
+    border-radius: var(--radius-sm);
+    padding: 7px 12px;
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: color-mix(in oklab, var(--color-error) 82%, transparent);
+    transform: rotate(-4.5deg);
+    opacity: 0.8;
+  }
+
+  [data-visible='true'] .stamp {
+    animation: ash-stamp 0.55s var(--ease-snap) 0.45s both;
+  }
+
+  /* ---- message-path diagram ------------------------------------------- */
+  .dash-rule {
+    background-image: repeating-linear-gradient(
+      90deg,
+      var(--color-outline) 0 5px,
+      transparent 5px 11px
+    );
+  }
+
+  .hairline-draw {
+    transform: scaleX(0);
+    transform-origin: 0% 50%;
+    transition: transform 0.9s var(--ease-expo);
+  }
+
+  .path-hit {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+  }
+
+  .dim-after,
+  .fade-in-after {
+    transition: opacity 0.7s var(--ease-expo);
+  }
+
+  .fade-in-after {
+    opacity: 0;
+    transition-delay: 1.2s;
+  }
+
+  [data-visible='true'] .hairline-draw {
+    transform: scaleX(1);
+  }
+
+  [data-visible='true'] .path-hit {
+    animation: ash-draw 1.5s var(--ease-expo) 0.45s forwards;
+  }
+
+  [data-visible='true'] .dim-after {
+    opacity: 0.5;
+    transition-delay: 0.9s;
+  }
+
+  [data-visible='true'] .fade-in-after {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .msg-ember,
+    .msg-residue,
+    .live-dot {
+      animation: none;
+    }
+    .msg-ember,
+    .msg-residue {
+      display: none;
+    }
+    .caret {
+      animation: none;
+    }
+    [data-reveal] {
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+    .stagger-row {
+      opacity: 1;
+    }
+    [data-visible='true'] .stagger-row,
+    [data-visible='true'] .stamp {
+      animation: none;
+    }
+    .hairline-draw {
+      transform: scaleX(1);
+      transition: none;
+    }
+    .path-hit {
+      stroke-dashoffset: 0;
+      animation: none;
+    }
+    .dim-after,
+    .fade-in-after {
+      opacity: 1;
+      transition: none;
+    }
+  }
+}
+
+@keyframes ash-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ash-msg {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+    clip-path: inset(0 0 0 0);
+  }
+  6% {
+    opacity: 1;
+    transform: none;
+  }
+  66% {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+  80% {
+    opacity: 1;
+    clip-path: inset(0 0 0 100%);
+  }
+  82% {
+    opacity: 0;
+    clip-path: inset(0 0 0 100%);
+  }
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 100%);
+  }
+}
+
+/* The flame front rides the wipe boundary: -97% + 98% of its own width lands
+   just ahead of the clip edge, so the heat always leads the char. */
+@keyframes ash-sweep {
+  0%,
+  64% {
+    opacity: 0;
+    transform: translateX(-97%);
+  }
+  66% {
+    opacity: 0.9;
+    transform: translateX(-97%);
+  }
+  80% {
+    opacity: 0.9;
+    transform: translateX(3%);
+  }
+  83% {
+    opacity: 0;
+    transform: translateX(3%);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-97%);
+  }
+}
+
+@keyframes ash-residue {
+  0%,
+  66% {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  70% {
+    opacity: 0.5;
+  }
+  80% {
+    opacity: 0.55;
+    clip-path: inset(0 0 0 0);
+  }
+  88%,
+  100% {
+    opacity: 0;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes ash-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.82);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes ash-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-4.5deg) scale(1.75);
+  }
+  to {
+    opacity: 0.8;
+    transform: rotate(-4.5deg) scale(1);
+  }
+}
+
+@keyframes ash-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ash-blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
